@@ -9,59 +9,18 @@ log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
 
 from ..debug import memory_consumed
-from ..utilz import ListTable
-from tqdm import tqdm as _tqdm
+from ..utilz import ListTable, Averager, tqdm
 
 import torch
 
 from torch import optim, nn
-
 from collections import namedtuple
 
 Feeder = namedtuple('Feeder', ['train', 'test'])
-
-def tqdm(a):
-    return _tqdm(a) if Config().tqdm else a
-
 class FLAGS:
     CONTINUE_TRAINING = 0
     STOP_TRAINING = 1
     
-class Averager(list):
-    def __init__(self, filename=None, *args, **kwargs):
-        super(Averager, self).__init__(*args, **kwargs)
-        if filename:
-            open(filename, 'w').close()
-
-        self.filename = filename
-        
-    @property
-    def avg(self):
-        if len(self):
-            return sum(self)/len(self)
-        else:
-            return 0
-
-
-    def __str__(self):
-        if len(self) > 0:
-            return 'min/max/avg/latest: {:0.5f}/{:0.5f}/{:0.5f}/{:0.5f}'.format(min(self), max(self), self.avg, self[-1])
-        
-        return '<empty>'
-
-    def append(self, a):
-        try:
-            super(Averager, self).append(a.data[0])
-        except:
-            super(Averager, self).append(a)
-            
-    def empty(self):
-        del self[:]
-
-    def write_to_file(self):
-        if self.filename:
-            with open(self.filename, 'a') as f:
-                f.write(self.__str__() + '\n')
 
 class EpochAverager(Averager):
     def __init__(self, filename=None, *args, **kwargs):
@@ -102,6 +61,7 @@ class Trainer(object):
                                                                lr=0.1, momentum=0.1)
 
         self.__build_stats(directory)
+        self.best_model = (0, self.model.state_dict())
         
     def __build_stats(self, directory):
         
@@ -116,7 +76,7 @@ class Trainer(object):
         self.f1score   = EpochAverager(filename = '{}/{}/{}.{}'.format(directory, self.name, 'metrics', 'f1score'))
 
         self.metrics = [self.train_loss, self.test_loss, self.accuracy, self.precision, self.recall, self.f1score]
-        self.best_model = (0, self.model.state_dict())
+
         
     def __build_feeder(self, feeder, *args, **kwargs):
         assert feeder is not None, 'feeder is None, fatal error'
@@ -165,16 +125,16 @@ class Trainer(object):
             return
         self.model.eval()
         for j in tqdm(range(self.feeder.test.num_batch)):
-            _, i, t = self.feeder.train.next_batch()
+            _, i, t = self.feeder.test.next_batch()
             output =  self.model(*i)
 
-            loss = self.loss_function(output, t, self.feeder.train, j)
+            loss = self.loss_function(output, t, self.feeder.test, j)
             self.test_loss.cache(loss.data[0])
-            accuracy = self.accuracy_function(output, t, self.feeder.train, j)
+            accuracy = self.accuracy_function(output, t, self.feeder.test, j)
             self.accuracy.cache(accuracy.data[0])
 
             if self.f1score_function:
-                precision, recall, f1score = self.f1score_function(output, t, self.feeder.train, j)
+                precision, recall, f1score = self.f1score_function(output, t, self.feeder.test, j)
                 self.precision.append(precision)
                 self.recall.append(recall)
                 self.f1score.append(f1score)
@@ -192,7 +152,7 @@ class Trainer(object):
             return self.loss_trend()
 
         if self.best_model[0] < self.accuracy.avg:
-            self.best_model = (self.accuracy.avg, self.runner.model.state_dict())
+            self.best_model = (self.accuracy.avg, self.model.state_dict())
             self.save_best_model()
 
     def loss_trend(self):
@@ -213,7 +173,7 @@ class Trainer(object):
         return -1
     
 class Predictor(object):
-    def __init__(self, runner=None, model=None,
+    def __init__(self, model=None,
                  feed = None,
                  repr_function = None,
                  *args, **kwargs):
@@ -229,7 +189,7 @@ class Predictor(object):
     def predict(self,  batch_index=0):
         log.debug('batch_index: {}'.format(batch_index))
         _, i, *__ = self.feed.nth_batch(batch_index)
-        self.runner.model.eval()
+        self.model.eval()
         output = self.model(*i)
         results = ListTable()
         results.extend( self.repr_function(output, self.feed, batch_index) )
