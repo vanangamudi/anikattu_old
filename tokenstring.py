@@ -131,7 +131,7 @@ class TokenString(list):
 
 
 import sys
-from tokenizer import word_tokenize
+from .tokenizer import word_tokenize
 if __name__ == '__main__':
 
     t = TokenString(sys.argv[1], word_tokenize).delete_whitespace()

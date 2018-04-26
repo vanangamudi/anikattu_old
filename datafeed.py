@@ -9,8 +9,8 @@ log.setLevel(logging.INFO)
 
 import random
 
-from utilz import tqdm
-from debug import memory_consumed
+from .utilz import tqdm
+from .debug import memory_consumed
 
 class DataFeed(object):
 
