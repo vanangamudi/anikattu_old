@@ -9,8 +9,8 @@ log.setLevel(logging.INFO)
 
 import random
 
-from utilz import tqdm
-from debug import memory_consumed
+from .utilz import tqdm
+from .debug import memory_consumed
 
 class DataFeed(object):
 
@@ -93,6 +93,8 @@ class DataFeed(object):
                 log.debug('datafeed: {} over run - resetting offset to zero for {} time'.format(self.name, self._exhausted_count))
 
             return self.batch(batch_size=batch_size, apply_batchop=apply_batchop)
+        except SystemExit:
+            exit(1)
         except:
             log.exception('batch failed')
             return self.next_batch(apply_batchop=apply_batchop)
