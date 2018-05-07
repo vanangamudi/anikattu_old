@@ -154,17 +154,16 @@ class Trainer(object):
         if self.best_model[0] < self.accuracy.avg:
             self.best_model = (self.accuracy.avg, self.model.state_dict())
             self.save_best_model()
-            
 
     def loss_trend(self):
-        if len(self.test_loss) > 10:
-            losses = self.test_loss[-10:]
+        if len(self.test_loss) > 4:
+            losses = self.test_loss[-4:]
             count = 0
             for l, r in zip(losses, losses[1:]):
                 if l < r:
                     count += 1
                     
-            if count > 9:
+            if count > 2:
                 return FLAGS.STOP_TRAINING
 
         return FLAGS.CONTINUE_TRAINING

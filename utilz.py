@@ -155,8 +155,7 @@ def init_hidden(batch_size, cell):
         if Config.cuda:
             hidden  = hidden.cuda()
         return hidden
-
-
+    
 class Averager(list):
     def __init__(self, filename=None, *args, **kwargs):
         super(Averager, self).__init__(*args, **kwargs)
