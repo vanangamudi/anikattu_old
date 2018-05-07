@@ -12,23 +12,11 @@ from torch import nn
 from torch.autograd import Variable
 
 from collections import namedtuple, defaultdict
-"""
-from nltk.tokenize import WordPunctTokenizer
-word_punct_tokenizer = WordPunctTokenizer()
-word_tokenize = word_punct_tokenizer.tokenize
-"""
-
-from tokenizer import word_tokenize
-
-VOCAB =  ['PAD', 'UNK', 'EOS']
-PAD = VOCAB.index('PAD')
 
 """
     Local Utilities, Helper Functions
 
 """
-
-Sample = namedtuple('Sample', ['id', 'aid', 'pid', 'qid', 'squad_id', 'context', 'q', 'a', 'a_start', 'a_end'])
 
 """
 Logging utils
@@ -88,6 +76,7 @@ import numpy as np
 def seq_maxlen(seqs):
     return max([len(seq) for seq in seqs])
 
+PAD = 0
 def pad_seq(seqs, maxlen=0, PAD=PAD):
     def pad_seq_(seq):
         return seq[:maxlen] + [PAD]*(maxlen-len(seq))
@@ -134,16 +123,11 @@ torch utils
 """
 
 
-def LongVar(Config, array):
-    ret =  Variable(torch.LongTensor(array))
-    if Config.cuda:
-        ret = ret.cuda()
+def LongVar(array, requires_grad=False):
+    return Var(array, requires_grad).long()
 
-    return ret
-
-
-def Var(Config, array):
-    ret =  Variable(torch.Tensor(array))
+def Var(array, requires_grad=False):
+    ret =  Variable(torch.Tensor(array), requires_grad=requires_grad)
     if Config.cuda:
         ret = ret.cuda()
 
@@ -156,11 +140,55 @@ def init_hidden(batch_size, cell):
         layers = cell.num_layers
         if cell.bidirectional:
             layers = layers * 2
-        
-    hidden  = Variable(torch.zeros(layers, batch_size, cell.hidden_size))
-    context = Variable(torch.zeros(layers, batch_size, cell.hidden_size))
+
+    if isinstance(cell, nn.LSTMCell):
+        hidden  = Variable(torch.zeros(layers, batch_size, cell.hidden_size))
+        context = Variable(torch.zeros(layers, batch_size, cell.hidden_size))
     
-    if Config.cuda:
-        hidden  = hidden.cuda()
-        context = context.cuda()
-    return hidden, context
+        if Config.cuda:
+            hidden  = hidden.cuda()
+            context = context.cuda()
+        return hidden, context
+
+    if isinstance(cell, nn.GRUCell):
+        hidden  = Variable(torch.zeros(layers, batch_size, cell.hidden_size))
+        if Config.cuda:
+            hidden  = hidden.cuda()
+        return hidden
+
+
+class Averager(list):
+    def __init__(self, filename=None, *args, **kwargs):
+        super(Averager, self).__init__(*args, **kwargs)
+        if filename:
+            open(filename, 'w').close()
+
+        self.filename = filename
+        
+    @property
+    def avg(self):
+        if len(self):
+            return sum(self)/len(self)
+        else:
+            return 0
+
+
+    def __str__(self):
+        if len(self) > 0:
+            return 'min/max/avg/latest: {:0.5f}/{:0.5f}/{:0.5f}/{:0.5f}'.format(min(self), max(self), self.avg, self[-1])
+        
+        return '<empty>'
+
+    def append(self, a):
+        try:
+            super(Averager, self).append(a.data[0])
+        except:
+            super(Averager, self).append(a)
+            
+    def empty(self):
+        del self[:]
+
+    def write_to_file(self):
+        if self.filename:
+            with open(self.filename, 'a') as f:
+                f.write(self.__str__() + '\n')
