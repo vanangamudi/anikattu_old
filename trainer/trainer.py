@@ -16,6 +16,8 @@ import torch
 from torch import optim, nn
 from collections import namedtuple
 
+from nltk.corpus import stopwords
+
 Feeder = namedtuple('Feeder', ['train', 'test'])
 class FLAGS:
     CONTINUE_TRAINING = 0
@@ -58,10 +60,11 @@ class Trainer(object):
         self.f1score_function = f1score_function
         
         self.optimizer = optimizer if optimizer else optim.SGD(self.model.parameters(),
-                                                               lr=0.1, momentum=0.1)
+                                                               lr=0.8, momentum=0.3)
 
         self.__build_stats(directory)
         self.best_model = (0, self.model.state_dict())
+        self.best_model_criteria = self.accuracy
         
     def __build_stats(self, directory):
         
@@ -83,26 +86,25 @@ class Trainer(object):
         self.feeder = feeder
 
     def save_best_model(self):
-        log.info('saving the last best model...')
-        torch.save(self.best_model[1], '{}.{}'.format(self.name, 'pth'))
+        log.info('saving the last best model with accuracy {}...'.format(self.best_model[0]))
+        torch.save(self.best_model[1], '{}/{}.{}'.format(Config.path.weights, self.name, 'pth'))
         
     def train(self, test_drive=False):
         self.model.train()
         for epoch in range(self.epochs):
             log.critical('memory consumed : {}'.format(memory_consumed()))            
 
-
             if self.do_every_checkpoint(epoch) == FLAGS.STOP_TRAINING:
                 log.info('loss trend suggests to stop training')
                 return
-
+                        
             for j in tqdm(range(self.feeder.train.num_batch)):
                 log.debug('{}th batch'.format(j))
                 self.optimizer.zero_grad()
-                _, i, t = self.feeder.train.next_batch()
-                output = self.model(*i)
-                loss = self.loss_function(output, t, self.feeder.train, j)
-                self.train_loss.append(loss.data[0])
+                input_ = self.feeder.train.next_batch()
+                output = self.model(input_)
+                loss = self.loss_function(output, input_, j)
+                self.train_loss.append(loss.data.item())
 
                 loss.backward()
                 self.optimizer.step()
@@ -125,36 +127,44 @@ class Trainer(object):
             return
         self.model.eval()
         for j in tqdm(range(self.feeder.test.num_batch)):
-            _, i, t = self.feeder.test.next_batch()
-            output =  self.model(*i)
+            self.optimizer.zero_grad()                            
+            input_ = self.feeder.test.next_batch()
+            output =  self.model(input_)
 
-            loss = self.loss_function(output, t, self.feeder.test, j)
-            self.test_loss.cache(loss.data[0])
-            accuracy = self.accuracy_function(output, t, self.feeder.test, j)
-            self.accuracy.cache(accuracy.data[0])
+            loss = self.loss_function(output, input_, j)
+            self.test_loss.cache(loss.data.item())
+            accuracy = self.accuracy_function(output, input_, j)
+            self.accuracy.cache(accuracy.data.item())
 
             if self.f1score_function:
-                precision, recall, f1score = self.f1score_function(output, t, self.feeder.test, j)
-                self.precision.append(precision)
-                self.recall.append(recall)
-                self.f1score.append(f1score)
+                precision, recall, f1score = self.f1score_function(output, input_, j)
+                self.precision.cache(precision)
+                self.recall.cache(recall)
+                self.f1score.cache(f1score)
 
                 
         log.info('-- {} -- loss: {}, accuracy: {}'.format(epoch, self.test_loss.epoch_cache, self.accuracy.epoch_cache))
         if self.f1score_function:
-            log.info('-- {} -- precision: {}'.format(epoch, self.precision))
-            log.info('-- {} -- recall: {}'.format(epoch, self.recall))
-            log.info('-- {} -- f1score: {}'.format(epoch, self.f1score))
-
+            log.info('-- {} -- precision: {}'.format(epoch, self.precision.epoch_cache))
+            log.info('-- {} -- recall: {}'.format(epoch, self.recall.epoch_cache))
+            log.info('-- {} -- f1score: {}'.format(epoch, self.f1score.epoch_cache))
+            
+        
+        log.info('accuracy of the best model so far {} and current accuracy: {}'.format(self.best_model[0], self.best_model_criteria.epoch_cache.avg))
+        if self.best_model[0] < self.best_model_criteria.epoch_cache.avg:
+            log.info('beat best model')
+            self.best_model = (self.best_model_criteria.epoch_cache.avg, self.model.state_dict())
+            self.save_best_model()
+            
         self.test_loss.clear_cache()
         self.accuracy.clear_cache()
+        self.precision.clear_cache()
+        self.recall.clear_cache()
+        self.f1score.clear_cache()
+            
         if early_stopping:
             return self.loss_trend()
-
-        if self.best_model[0] < self.accuracy.avg:
-            self.best_model = (self.accuracy.avg, self.model.state_dict())
-            self.save_best_model()
-
+        
     def loss_trend(self):
         if len(self.test_loss) > 4:
             losses = self.test_loss[-4:]
@@ -188,10 +198,10 @@ class Predictor(object):
         
     def predict(self,  batch_index=0):
         log.debug('batch_index: {}'.format(batch_index))
-        _, i, *__ = self.feed.nth_batch(batch_index)
+        input_ = self.feed.nth_batch(batch_index)
         self.model.eval()
-        output = self.model(*i)
+        output = self.model(input_)
         results = ListTable()
-        results.extend( self.repr_function(output, self.feed, batch_index) )
+        results.extend( self.repr_function(output, input_, batch_index) )
         output_ = output
         return output_, results
