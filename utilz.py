@@ -180,7 +180,7 @@ class Averager(list):
 
     def append(self, a):
         try:
-            super(Averager, self).append(a.data[0])
+            super(Averager, self).append(a.data.item())
         except:
             super(Averager, self).append(a)
             
@@ -191,3 +191,4 @@ class Averager(list):
         if self.filename:
             with open(self.filename, 'a') as f:
                 f.write(self.__str__() + '\n')
+                f.flush()
