@@ -7,10 +7,11 @@ log.setLevel(logging.INFO)
 
 class Vocab:
 
-    def __init__(self, vocab, special_tokens, max_size=None, sort_key=None, freq_threshold=1):
+    def __init__(self, vocab, special_tokens = [], max_size=None, sort_key=None, freq_threshold=1, keep_vocab_dict=True, tokens=None):
 
         log.info('Constructiong vocabuluary object...')
-        self.vocab = vocab
+        
+        self.freq_dict = vocab
 
         if isinstance(freq_threshold, int):
             vocab = {w:c for w, c in vocab.items() if c >= freq_threshold}
@@ -19,17 +20,19 @@ class Vocab:
             vocab = {w:c for w, c in vocab.items() if c <= l or c >= h}
 
         vocab = sorted(vocab.items(), key=lambda x: x[1], reverse=True)
-        if max_size: vocab = vocab[:max_size]
-        vocab = [ w for w,c in vocab]
-        index2word = vocab
-        if sort_key:
-            index2word = sorted(index2word, key=sort_key)
+        if max_size:
+            vocab = vocab[:max_size]
+        
+        index2word = [ w for w,c in vocab]
+        if tokens  :  index2word = tokens
+        if sort_key:  index2word = sorted(index2word, key=sort_key)
 
         self.index2word = special_tokens + index2word
-        self.word2index = {w:i for i, w in enumerate(self.index2word)}
+        self.word2index = { w:i for i, w in enumerate(self.index2word) }
 
         log.info('number of word in index2word and word2index: {} and {}'
                  .format(len(self.index2word), len(self.word2index)))
+
         
     def __getitem__(self, key):
         if type(key) == str:
