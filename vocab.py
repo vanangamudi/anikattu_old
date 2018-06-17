@@ -6,11 +6,10 @@ log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
 
 class Vocab:
-
-    def __init__(self, vocab, special_tokens, max_size=None, sort_key=None, freq_threshold=1):
+    def __init__(self, vocab, special_tokens=[], max_size=None, sort_key=None, freq_threshold=1, tokens=None):
 
         log.info('Constructiong vocabuluary object...')
-        self.vocab = vocab
+        self.freq_dict = vocab
 
         if isinstance(freq_threshold, int):
             vocab = {w:c for w, c in vocab.items() if c >= freq_threshold}
@@ -22,6 +21,7 @@ class Vocab:
         if max_size: vocab = vocab[:max_size]
         vocab = [ w for w,c in vocab]
         index2word = vocab
+        if tokens  :  index2word = tokens
         if sort_key:
             index2word = sorted(index2word, key=sort_key)
 
