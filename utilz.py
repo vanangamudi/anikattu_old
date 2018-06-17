@@ -222,8 +222,6 @@ class Averager(list):
                 f.write(self.__str__() + '\n')
                 f.flush()
 
-
-
 # Python program to find SHA256 hash string of a file
 #https://www.quickprogrammingtips.com/python/how-to-calculate-sha256-hash-of-a-file-in-python.html
 import hashlib

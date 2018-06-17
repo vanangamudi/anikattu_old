@@ -18,6 +18,8 @@ import torch
 from torch import optim, nn
 from collections import namedtuple
 
+from nltk.corpus import stopwords
+
 Feeder = namedtuple('Feeder', ['train', 'test'])
 class FLAGS:
     CONTINUE_TRAINING = 0
@@ -67,6 +69,7 @@ class Trainer(object):
 
         self.__build_stats()
         self.best_model = (0, self.model.state_dict())
+        self.best_model_criteria = self.accuracy
         
     def __build_stats(self):
         
@@ -107,7 +110,7 @@ class Trainer(object):
                 input_ = self.feeder.train.next_batch()
                 output = self.model(input_)
                 loss = self.loss_function(output, input_)
-                self.train_loss.cache(loss.item())
+                self.train_loss.cache(loss.data.item())
 
                 loss.backward()
                 self.optimizer.step()
@@ -144,7 +147,6 @@ class Trainer(object):
             log.info('-- {} -- precision: {}'.format(epoch, self.precision.epoch_cache))
             log.info('-- {} -- recall: {}'.format(epoch, self.recall.epoch_cache))
             log.info('-- {} -- f1score: {}'.format(epoch, self.f1score.epoch_cache))
-
 
         if self.best_model[0] < self.accuracy.epoch_cache.avg:
             log.info('beat best model...')

@@ -89,7 +89,7 @@ class Trainer(Trainer):
                 t = targets[0].transpose(0,1)
                 for ti in range(t.size(0)):
                     decoder_output = self.decoder_model(input_, encoder_output, decoder_input)
-                    loss_, decoder_input = self.loss_function(ti, decoder_output, input_)
+                    loss_, decoder_input = self.loss_function(ti, decoder_output, input_, j)
                     loss += loss_
                     
                 loss.backward()
@@ -125,9 +125,9 @@ class Trainer(Trainer):
             t = targets[0].transpose(0,1)
             for ti in range(t.size(0)):
                 decoder_output = self.decoder_model(input_, encoder_output, decoder_input)
-                loss_, decoder_input = self.loss_function(ti, decoder_output, input_)
+                loss_, decoder_input = self.loss_function(ti, decoder_output, input_, j)
                 loss += loss_
-                accuracy += self.accuracy_function(ti, decoder_output, input_)
+                accuracy += self.accuracy_function(ti, decoder_output, input_, j)
                 decoder_outputs.append(decoder_input)
                         
             self.test_loss.cache(loss.data[0])
@@ -135,7 +135,7 @@ class Trainer(Trainer):
             self.accuracy.cache(accuracy.data[0]/ti)
 
             if self.f1score_function:
-                precision, recall, f1score = self.f1score_function(decoder_outputs, input_)
+                precision, recall, f1score = self.f1score_function(decoder_outputs, input_, j)
                 self.precision.append(precision)
                 self.recall.append(recall)
                 self.f1score.append(f1score)

@@ -18,6 +18,7 @@ class Vocab:
             vocab = {w:c for w, c in vocab.items() if c <= l or c >= h}
 
         vocab = sorted(vocab.items(), key=lambda x: x[1], reverse=True)
+
         if max_size: vocab = vocab[:max_size]
         vocab = [ w for w,c in vocab]
         index2word = vocab
@@ -26,10 +27,11 @@ class Vocab:
             index2word = sorted(index2word, key=sort_key)
 
         self.index2word = special_tokens + index2word
-        self.word2index = {w:i for i, w in enumerate(self.index2word)}
+        self.word2index = { w:i for i, w in enumerate(self.index2word) }
 
         log.info('number of word in index2word and word2index: {} and {}'
                  .format(len(self.index2word), len(self.word2index)))
+
         
     def __getitem__(self, key):
         if type(key) == str:
