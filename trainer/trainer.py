@@ -70,6 +70,7 @@ class Trainer(object):
         self.__build_stats()
         self.best_model = (0, self.model.state_dict())
         self.best_model_criteria = self.accuracy
+        self.save_best_model()
         
     def __build_stats(self):
         
@@ -79,6 +80,11 @@ class Trainer(object):
         self.accuracy   = EpochAverager(filename = '{}/results/{}.{}'.format(self.ROOT_DIR, 'metrics', 'accuracy'))
 
         # optional metrics
+        self.tp = EpochAverager(filename = '{}/results/{}.{}'.format(self.ROOT_DIR, 'metrics', 'tp'))
+        self.fp = EpochAverager(filename = '{}/results/{}.{}'.format(self.ROOT_DIR, 'metrics', 'fp'))
+        self.fn = EpochAverager(filename = '{}/results/{}.{}'.format(self.ROOT_DIR, 'metrics', 'fn'))
+        self.tn = EpochAverager(filename = '{}/results/{}.{}'.format(self.ROOT_DIR, 'metrics', 'tn'))
+      
         self.precision = EpochAverager(filename = '{}/results/{}.{}'.format(self.ROOT_DIR, 'metrics', 'precision'))
         self.recall = EpochAverager(filename = '{}/results/{}.{}'.format(self.ROOT_DIR, 'metrics', 'recall'))
         self.f1score   = EpochAverager(filename = '{}/results/{}.{}'.format(self.ROOT_DIR, 'metrics', 'f1score'))
@@ -137,13 +143,23 @@ class Trainer(object):
             self.accuracy.cache(accuracy.item())
 
             if self.f1score_function:
-                precision, recall, f1score = self.f1score_function(output, input_)
+                (tp, fn, fp, tn), precision, recall, f1score = self.f1score_function(output, input_, j)
+                
+                self.tp.cache(tp)
+                self.fn.cache(fn)
+                self.fp.cache(fp)
+                self.tn.cache(tn)
                 self.precision.cache(precision)
                 self.recall.cache(recall)
                 self.f1score.cache(f1score)
 
         log.info('-- {} -- loss: {}, accuracy: {}'.format(epoch, self.test_loss.epoch_cache, self.accuracy.epoch_cache))
         if self.f1score_function:
+            log.info('-- {} -- tp: {}'.format(epoch, sum(self.tp.epoch_cache)))
+            log.info('-- {} -- fn: {}'.format(epoch, sum(self.fn.epoch_cache)))
+            log.info('-- {} -- fp: {}'.format(epoch, sum(self.fp.epoch_cache)))
+            log.info('-- {} -- tn: {}'.format(epoch, sum(self.tn.epoch_cache)))
+                        
             log.info('-- {} -- precision: {}'.format(epoch, self.precision.epoch_cache))
             log.info('-- {} -- recall: {}'.format(epoch, self.recall.epoch_cache))
             log.info('-- {} -- f1score: {}'.format(epoch, self.f1score.epoch_cache))
@@ -155,6 +171,10 @@ class Trainer(object):
 
         self.test_loss.clear_cache()
         self.accuracy.clear_cache()
+        self.tp.clear_cache()
+        self.fn.clear_cache()
+        self.fp.clear_cache()
+        self.tn.clear_cache()
         self.f1score.clear_cache()
         self.precision.clear_cache()
         self.recall.clear_cache()
