@@ -1,4 +1,4 @@
-from config import Config
+from config import CONFIG
 from pprint import pprint, pformat
 
 import logging
@@ -90,7 +90,8 @@ class DataFeed(object):
                 self._exhausted_count += 1
                 self.reset_offset()
                 
-                log.debug('datafeed: {} over run - resetting offset to zero for {} time'.format(self.name, self._exhausted_count))
+                log.debug('datafeed: {} over run - resetting offset to zero for {} time'
+                          .format(self.name, self._exhausted_count))
 
             return self.batch(batch_size=batch_size, apply_batchop=apply_batchop)
         except SystemExit:

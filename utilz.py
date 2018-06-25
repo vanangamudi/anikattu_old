@@ -1,6 +1,9 @@
-from config import Config
+from config import CONFIG
 from pprint import pprint, pformat
 
+import os
+import shutil
+    
 import logging
 from pprint import pprint, pformat
 logging.basicConfig(format="%(levelname)-8s:%(filename)s.%(funcName)20s >>   %(message)s")
@@ -17,6 +20,20 @@ from collections import namedtuple, defaultdict
     Local Utilities, Helper Functions
 
 """
+def mkdir_if_exist_not(name):
+    if not os.path.isdir(name):
+        return os.mkdir(name)
+    
+def initialize_task(name):
+    root_dir = hash_file('hpconfig.py')[-6:]
+    mkdir_if_exist_not(root_dir)
+    mkdir_if_exist_not('{}/results'.format(root_dir))
+    mkdir_if_exist_not('{}/weights'.format(root_dir))
+
+    shutil.copy('hpconfig.py', root_dir)
+    shutil.copy('config.py', root_dir)
+
+    return root_dir
 
 """
 Logging utils
@@ -34,10 +51,9 @@ def logger(func, dlevel=logging.INFO):
 
 from pprint import pprint, pformat
 from tqdm import tqdm as _tqdm
-from config import Config
 
 def tqdm(a):
-    return _tqdm(a) if Config().tqdm else a
+    return _tqdm(a) if CONFIG().tqdm else a
 
 
 def squeeze(lol):
@@ -121,38 +137,41 @@ class ListTable(list):
 """
 torch utils
 """
-
+def are_weights_same(model1, model2):
+    for p1, p2 in zip(model1.parameters(), model2.parameters()):
+        if p1.data.ne(p2.data).sum() > 0:
+            return False
+    return True
 
 def LongVar(array, requires_grad=False):
     return Var(array, requires_grad).long()
 
 def Var(array, requires_grad=False):
     ret =  Variable(torch.Tensor(array), requires_grad=requires_grad)
-    if Config.cuda:
+    if CONFIG.cuda:
         ret = ret.cuda()
 
     return ret
 
 def init_hidden(batch_size, cell):
-
     layers = 1
-    if not isinstance(cell, (nn.LSTMCell, nn.GRUCell)):
+    if isinstance(cell, (nn.LSTM, nn.GRU, nn.LSTMCell, nn.GRUCell)):
         layers = cell.num_layers
         if cell.bidirectional:
             layers = layers * 2
 
-    if isinstance(cell, nn.LSTMCell):
+    if isinstance(cell, (nn.LSTM, nn.LSTMCell)):
         hidden  = Variable(torch.zeros(layers, batch_size, cell.hidden_size))
         context = Variable(torch.zeros(layers, batch_size, cell.hidden_size))
     
-        if Config.cuda:
+        if CONFIG.cuda:
             hidden  = hidden.cuda()
             context = context.cuda()
         return hidden, context
 
-    if isinstance(cell, nn.GRUCell):
+    if isinstance(cell, (nn.GRU, nn.GRUCell)):
         hidden  = Variable(torch.zeros(layers, batch_size, cell.hidden_size))
-        if Config.cuda:
+        if CONFIG.cuda:
             hidden  = hidden.cuda()
         return hidden
     
@@ -180,7 +199,7 @@ class Averager(list):
 
     def append(self, a):
         try:
-            super(Averager, self).append(a.data[0])
+            super(Averager, self).append(a.data.item())
         except:
             super(Averager, self).append(a)
             
@@ -188,6 +207,30 @@ class Averager(list):
         del self[:]
 
     def write_to_file(self):
+        
         if self.filename:
+            import matplotlib.pyplot as plt
+            plt.plot(self)
+            plt.title(self.filename, fontsize=20)
+            plt.xlabel('epoch')
+            plt.savefig('{}.{}'.format(self.filename, 'png'))
+            plt.close()
+            
             with open(self.filename, 'a') as f:
                 f.write(self.__str__() + '\n')
+                f.flush()
+
+# Python program to find SHA256 hash string of a file
+#https://www.quickprogrammingtips.com/python/how-to-calculate-sha256-hash-of-a-file-in-python.html
+import hashlib
+
+def hash_file(filename):
+    sha256_hash = hashlib.sha256()
+    with open(filename,"rb") as f:
+        # Read and update hash string value in blocks of 4K
+        for byte_block in iter(lambda: f.read(4096),b""):
+            sha256_hash.update(byte_block)
+            
+    return sha256_hash.hexdigest()
+
+

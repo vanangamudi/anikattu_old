@@ -22,21 +22,24 @@ from ..utilz import Averager, LongVar
 
 class Trainer(Trainer):
     def __init__(self, name, model,feeder,
-                 optimizer=(None, None), 
+                 optimizer, 
 
-                 loss_function = None,
-                 accuracy_function = None,
-                 f1score_function = None,
+                 loss_function,
+                 accuracy_function,
+                 f1score_function,
                  
-                 initial_decoder_input = None,
+                 initial_decoder_input,
+                 directory,
+                 
                  teacher_forcing_ratio=0.5,
 
                  epochs=10000, checkpoint=1,
 
-                 directory='results',
+
                  *args, **kwargs):
         
         self.name  = name
+        self.ROOT_DIR = directory
         assert model != (None, None)
         self.encoder_model, self.decoder_model = model
         self.__build_feeder(feeder, *args, **kwargs)
@@ -57,14 +60,15 @@ class Trainer(Trainer):
                 optim.SGD(self.decoder_model.parameters(),lr=0.001, momentum=0.1)
             )
 
-        self.__build_stats(directory)
+        self.__build_stats()
         self.best_model = (0, (self.encoder_model.state_dict(), self.decoder_model.state_dict())
         )
 
     def save_best_model(self):
         log.info('saving the last best model...')
-        torch.save(self.best_model[1][0], '{}.{}.{}'.format(self.name, 'encoder', 'pth'))
-        torch.save(self.best_model[1][1], '{}.{}.{}'.format(self.name, 'decoder', 'pth'))
+        torch.save(self.best_model[1][0],  '{}/weights/encoder.{:0.4f}.{}'.format(self.ROOT_DIR, self.best_model[0], 'pth'))
+        torch.save(self.best_model[1][0],  '{}/weights/decoder.{:0.4f}.{}'.format(self.ROOT_DIR, self.best_model[0], 'pth'))
+
 
     def train(self):
         self.encoder_model.train()
@@ -89,7 +93,7 @@ class Trainer(Trainer):
                 t = targets[0].transpose(0,1)
                 for ti in range(t.size(0)):
                     decoder_output = self.decoder_model(input_, encoder_output, decoder_input)
-                    loss_, decoder_input = self.loss_function(ti, decoder_output, input_)
+                    loss_, decoder_input = self.loss_function(ti, decoder_output, input_, j)
                     loss += loss_
                     
                 loss.backward()
@@ -125,9 +129,9 @@ class Trainer(Trainer):
             t = targets[0].transpose(0,1)
             for ti in range(t.size(0)):
                 decoder_output = self.decoder_model(input_, encoder_output, decoder_input)
-                loss_, decoder_input = self.loss_function(ti, decoder_output, input_)
+                loss_, decoder_input = self.loss_function(ti, decoder_output, input_, j)
                 loss += loss_
-                accuracy += self.accuracy_function(ti, decoder_output, input_)
+                accuracy += self.accuracy_function(ti, decoder_output, input_, j)
                 decoder_outputs.append(decoder_input)
                         
             self.test_loss.cache(loss.item())
@@ -135,7 +139,7 @@ class Trainer(Trainer):
             self.accuracy.cache(accuracy.item()/ti)
 
             if self.f1score_function:
-                precision, recall, f1score = self.f1score_function(decoder_outputs, input_)
+                precision, recall, f1score = self.f1score_function(decoder_outputs, input_, j)
                 self.precision.append(precision)
                 self.recall.append(recall)
                 self.f1score.append(f1score)
