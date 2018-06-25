@@ -53,8 +53,8 @@ class Trainer(Trainer):
             self.encoder_optimizer, self.decoder_optimizer = optimizer
         else:
             self.encoder_optimizer, self.decoder_optimizer = (
-                optim.SGD(self.encoder_model.parameters(),lr=0.05, momentum=0.1),
-                optim.SGD(self.decoder_model.parameters(),lr=0.05, momentum=0.1)
+                optim.SGD(self.encoder_model.parameters(),lr=0.001, momentum=0.1),
+                optim.SGD(self.decoder_model.parameters(),lr=0.001, momentum=0.1)
             )
 
         self.__build_stats(directory)
@@ -130,9 +130,9 @@ class Trainer(Trainer):
                 accuracy += self.accuracy_function(ti, decoder_output, input_)
                 decoder_outputs.append(decoder_input)
                         
-            self.test_loss.cache(loss.data[0])
+            self.test_loss.cache(loss.item())
             if ti == 0: ti = 1
-            self.accuracy.cache(accuracy.data[0]/ti)
+            self.accuracy.cache(accuracy.item()/ti)
 
             if self.f1score_function:
                 precision, recall, f1score = self.f1score_function(decoder_outputs, input_)
@@ -153,7 +153,7 @@ class Trainer(Trainer):
 
         self.test_loss.clear_cache()
         self.accuracy.clear_cache()
-        if self.best_model[0] < self.accuracy.avg:
+        if self.best_model[0] <= self.accuracy.avg:
             self.best_model = (self.accuracy.avg, (self.encoder_model.state_dict(), self.decoder_model.state_dict()))
             self.save_best_model()
 
