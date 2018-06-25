@@ -7,7 +7,7 @@ log.setLevel(logging.INFO)
 
 class Vocab:
 
-    def __init__(self, vocab, special_tokens, max_size=None, sort_key=None, freq_threshold=1):
+    def __init__(self, vocab, special_tokens=[], max_size=None, sort_key=None, freq_threshold=1):
 
         log.info('Constructiong vocabuluary object...')
         self.vocab = vocab
