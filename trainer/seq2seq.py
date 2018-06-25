@@ -22,21 +22,24 @@ from ..utilz import Averager, LongVar
 
 class Trainer(Trainer):
     def __init__(self, name, model,feeder,
-                 optimizer=(None, None), 
+                 optimizer, 
 
-                 loss_function = None,
-                 accuracy_function = None,
-                 f1score_function = None,
+                 loss_function,
+                 accuracy_function,
+                 f1score_function,
                  
-                 initial_decoder_input = None,
+                 initial_decoder_input,
+                 directory,
+                 
                  teacher_forcing_ratio=0.5,
 
                  epochs=10000, checkpoint=1,
 
-                 directory='results',
+
                  *args, **kwargs):
         
         self.name  = name
+        self.ROOT_DIR = directory
         assert model != (None, None)
         self.encoder_model, self.decoder_model = model
         self.__build_feeder(feeder, *args, **kwargs)
@@ -57,14 +60,15 @@ class Trainer(Trainer):
                 optim.SGD(self.decoder_model.parameters(),lr=0.05, momentum=0.1)
             )
 
-        self.__build_stats(directory)
+        self.__build_stats()
         self.best_model = (0, (self.encoder_model.state_dict(), self.decoder_model.state_dict())
         )
 
     def save_best_model(self):
         log.info('saving the last best model...')
-        torch.save(self.best_model[1][0], '{}.{}.{}'.format(self.name, 'encoder', 'pth'))
-        torch.save(self.best_model[1][1], '{}.{}.{}'.format(self.name, 'decoder', 'pth'))
+        torch.save(self.best_model[1][0],  '{}/weights/encoder.{:0.4f}.{}'.format(self.ROOT_DIR, self.best_model[0], 'pth'))
+        torch.save(self.best_model[1][0],  '{}/weights/decoder.{:0.4f}.{}'.format(self.ROOT_DIR, self.best_model[0], 'pth'))
+
 
     def train(self):
         self.encoder_model.train()
