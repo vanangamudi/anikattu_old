@@ -35,9 +35,10 @@ class Vocab:
         
     def __getitem__(self, key):
         if type(key) == str:
-            if key in self.word2index:
+            try:
                 return self.word2index[key]
-            else:
+            except:
+                log.exception('==========')
                 return self.word2index['UNK']
         else: #type(key) == int:
             return self.index2word[key]
