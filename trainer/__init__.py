@@ -1,1 +1,1 @@
-from .trainer import Trainer, Feeder, Predictor
+from .trainer import Trainer, Tester, Predictor
