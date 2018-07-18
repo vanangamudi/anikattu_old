@@ -199,7 +199,6 @@ class Averager(list):
         else:
             return 0
 
-
     def __str__(self):
         if len(self) > 0:
             return 'min/max/avg/latest: {:0.5f}/{:0.5f}/{:0.5f}/{:0.5f}'.format(min(self), max(self), self.avg, self[-1])
@@ -220,14 +219,20 @@ class Averager(list):
         if self.filename:
             import matplotlib.pyplot as plt
             plt.plot(self)
-            plt.title(self.filename, fontsize=20)
+            plt.title(os.path.basename(self.filename), fontsize=20)
             plt.xlabel('epoch')
+            if self.ylim:
+                plt.ylim(*self.ylim)
+                
             plt.savefig('{}.{}'.format(self.filename, 'png'))
             plt.close()
-            
+
+            pickle.dump(list(self), open('{}.pkl'.format(self.filename), 'wb'))
             with open(self.filename, 'a') as f:
                 f.write(self.__str__() + '\n')
                 f.flush()
+
+                
 
 # Python program to find SHA256 hash string of a file
 #https://www.quickprogrammingtips.com/python/how-to-calculate-sha256-hash-of-a-file-in-python.html
