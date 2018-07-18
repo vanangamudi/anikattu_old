@@ -25,13 +25,15 @@ def mkdir_if_exist_not(name):
     if not os.path.isdir(name):
         return os.mkdir(name)
     
-def initialize_task(name):
-    root_dir = hash_file('hpconfig.py')[-6:]
+def initialize_task(hpconfig = 'hpconfig.py'):
+    log.info('loading hyperparameters from {}'.format(hpconfig))
+    root_dir = hash_file(hpconfig)[-6:]
     mkdir_if_exist_not(root_dir)
     mkdir_if_exist_not('{}/results'.format(root_dir))
+    mkdir_if_exist_not('{}/results/metrics'.format(root_dir))
     mkdir_if_exist_not('{}/weights'.format(root_dir))
 
-    shutil.copy('hpconfig.py', root_dir)
+    shutil.copy(hpconfig, root_dir)
     shutil.copy('config.py', root_dir)
 
     return root_dir
