@@ -1,9 +1,10 @@
-from config import CONFIG
+import config
 from pprint import pprint, pformat
 
 import os
 import shutil
-    
+import pickle
+
 import logging
 from pprint import pprint, pformat
 logging.basicConfig(format="%(levelname)-8s:%(filename)s.%(funcName)20s >>   %(message)s")
