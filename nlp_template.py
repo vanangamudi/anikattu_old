@@ -12,7 +12,7 @@ from anikattu.logger import CMDFilter
 import logging
 from pprint import pprint, pformat
 
-logging.basicConfig(format="%(levelname)-8s:%(filename)s.%(name)s.%(funcName)s >>   %(message)s")
+logging.basicConfig(format=config.FORMAT_STRING)
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
 
