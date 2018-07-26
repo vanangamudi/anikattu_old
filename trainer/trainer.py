@@ -208,17 +208,17 @@ class Tester(object):
                 self.recall.cache(recall)
                 self.f1score.cache(f1score)
 
-        self.log.info('-- {} -- loss: {}'.format(epoch, self.test_loss.epoch_cache))
-        self.log.info('-- {} -- accuracy: {}'.format(epoch, self.accuracy.epoch_cache))
+        self.log.info('={}=loss:{}'.format(epoch, self.test_loss.epoch_cache))
+        self.log.info('-{}-accuracy:{}'.format(epoch, self.accuracy.epoch_cache))
         if self.f1score_function:
-            self.log.info('-- {} -- tp: {}'.format(epoch, sum(self.tp.epoch_cache)))
-            self.log.info('-- {} -- fn: {}'.format(epoch, sum(self.fn.epoch_cache)))
-            self.log.info('-- {} -- fp: {}'.format(epoch, sum(self.fp.epoch_cache)))
-            self.log.info('-- {} -- tn: {}'.format(epoch, sum(self.tn.epoch_cache)))
+            self.log.info('-{}-tp:{}'.format(epoch, sum(self.tp.epoch_cache)))
+            self.log.info('-{}-fn:{}'.format(epoch, sum(self.fn.epoch_cache)))
+            self.log.info('-{}-fp:{}'.format(epoch, sum(self.fp.epoch_cache)))
+            self.log.info('-{}-tn:{}'.format(epoch, sum(self.tn.epoch_cache)))
                         
-            self.log.info('-- {} -- precision: {}'.format(epoch, self.precision.epoch_cache))
-            self.log.info('-- {} -- recall: {}'.format(epoch, self.recall.epoch_cache))
-            self.log.info('-- {} -- f1score: {}'.format(epoch, self.f1score.epoch_cache))
+            self.log.info('-{}-precision:{}'.format(epoch, self.precision.epoch_cache))
+            self.log.info('-{}-recall:{}'.format(epoch, self.recall.epoch_cache))
+            self.log.info('-{}-f1score:{}'.format(epoch, self.f1score.epoch_cache))
 
         if self.best_model[0] < self.accuracy.epoch_cache.avg:
             self.log.info('beat best model...')

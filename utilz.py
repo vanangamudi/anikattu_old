@@ -179,7 +179,7 @@ def init_hidden(batch_size, cell):
         return hidden
     
 class Averager(list):
-    def __init__(self, filename=None, ylim=None, *args, **kwargs):
+    def __init__(self, config, filename=None, ylim=None, *args, **kwargs):
         super(Averager, self).__init__(*args, **kwargs)
         self.filename = filename
         self.ylim = ylim
@@ -201,7 +201,8 @@ class Averager(list):
 
     def __str__(self):
         if len(self) > 0:
-            return 'min/max/avg/latest: {:0.5f}/{:0.5f}/{:0.5f}/{:0.5f}'.format(min(self), max(self), self.avg, self[-1])
+            #return 'min/max/avg/latest: {:0.5f}/{:0.5f}/{:0.5f}/{:0.5f}'.format(min(self), max(self), self.avg, self[-1])
+            return '{:0.4f}/{:0.4f}/{:0.4f}/{:0.4f}'.format(min(self), max(self), self.avg, self[-1])
         
         return '<empty>'
 
@@ -217,15 +218,16 @@ class Averager(list):
     def write_to_file(self):
         
         if self.filename:
-            import matplotlib.pyplot as plt
-            plt.plot(self)
-            plt.title(os.path.basename(self.filename), fontsize=20)
-            plt.xlabel('epoch')
-            if self.ylim:
-                plt.ylim(*self.ylim)
-                
-            plt.savefig('{}.{}'.format(self.filename, 'png'))
-            plt.close()
+            if self.config.plot_metrics:
+                import matplotlib.pyplot as plt
+                plt.plot(self)
+                plt.title(os.path.basename(self.filename), fontsize=20)
+                plt.xlabel('epoch')
+                if self.ylim:
+                    plt.ylim(*self.ylim)
+
+                plt.savefig('{}.{}'.format(self.filename, 'png'))
+                plt.close()
 
             pickle.dump(list(self), open('{}.pkl'.format(self.filename), 'wb'))
             with open(self.filename, 'a') as f:
