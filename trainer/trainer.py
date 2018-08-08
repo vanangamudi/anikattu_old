@@ -27,17 +27,62 @@ class FLAGS:
     
 
 class EpochAverager(Averager):
-    def __init__(self, filename=None, *args, **kwargs):
-        super(EpochAverager, self).__init__(filename, *args, **kwargs)
-        self.epoch_cache = Averager(filename, *args, *kwargs)
+    def __init__(self, config, filename=None, *args, **kwargs):
+        super(EpochAverager, self).__init__(config, filename, *args, **kwargs)
+        self.config = config
+        self.epoch_cache = Averager(config, filename, *args, *kwargs)
 
     def cache(self, a):
         self.epoch_cache.append(a)
 
     def clear_cache(self):
         super(EpochAverager, self).append(self.epoch_cache.avg)
-        self.epoch_cache.empty()
+        self.epoch_cache.empty();
         
+class MultiTrainer(object):
+    def __init__(self, name, config, trainers, testers, next_trainer_func=None, primary_trainer=None):
+        self.name = name
+        self.config = config
+        self.trainers = trainers
+        self.testers = testers
+
+        self.log = logging.getLogger('{}.{}.{}'.format(__name__, self.__class__.__name__, self.name))
+        
+        self.primary_trainer = None
+        if primary_trainer:
+            self.primary_trainer = self.trainers[primary_trainer]
+
+        if next_trainer_func:
+            self.get_next_trainer = next_trainer_func
+        
+    def train(self):
+        if self.primary_trainer:
+            self.log.info('running primary trainer: {}'.format(self.primary_trainer.name))
+            self.primary_trainer.train()
+
+            for i in range(self.primary_trainer.checkpoint * 5):
+                if not  self.get_next_trainer().train():
+                    raise Exception
+        else:
+            for name, trainer in self.trainers.items():
+                if not trainer.train():
+                    raise Exception
+
+        return True            
+
+    def get_next_trainer(self):
+
+        accuracies = sorted(
+            [(v.accuracy[-1], k) for k,v in self.testers.items()],
+            key=lambda x: x[0]
+        )
+        pprint(accuracies)
+
+        self.log.info('{:0.4f} ===> {}'.format(*accuracies[0]))
+
+        return self.trainers[accuracies[0][1]]
+        
+                 
 class Trainer(object):
     def __init__(self, name,
                  config,
