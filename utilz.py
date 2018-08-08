@@ -181,6 +181,7 @@ def init_hidden(batch_size, cell):
 class Averager(list):
     def __init__(self, config, filename=None, ylim=None, *args, **kwargs):
         super(Averager, self).__init__(*args, **kwargs)
+        self.config = config
         self.filename = filename
         self.ylim = ylim
         if filename:
@@ -218,7 +219,7 @@ class Averager(list):
     def write_to_file(self):
         
         if self.filename:
-            if self.config.plot_metrics:
+            if self.config.CONFIG.plot_metrics:
                 import matplotlib.pyplot as plt
                 plt.plot(self)
                 plt.title(os.path.basename(self.filename), fontsize=20)
