@@ -100,13 +100,13 @@ class Trainer(object):
         self.config = config
         self.ROOT_DIR = directory
 
-        self.log = logging.getLogger('{}.{}'.format(__name__, self.name))
+        self.log = logging.getLogger('{}.{}.{}'.format(__name__, self.__class__.__name__, self.name))
         
         self.model = model
         self.feed = feed
         
         self.epochs     = epochs
-        self.checkpoint = checkpoint
+        self.checkpoint = min(checkpoint, epochs)
 
         self.do_every_checkpoint = do_every_checkpoint if not do_every_checkpoint == None else lambda x: FLAGS.CONTINUE_TRAINING
 
@@ -121,7 +121,7 @@ class Trainer(object):
         
     def __build_stats(self):
         # necessary metrics
-        self.train_loss = EpochAverager(filename = '{}/results/metrics/{}.{}'.format(self.ROOT_DIR, self.name,  'train_loss'))
+        self.train_loss = EpochAverager(self.config, filename = '{}/results/metrics/{}.{}'.format(self.ROOT_DIR, self.name,  'train_loss'))
         self.metrics = [self.train_loss]
 
     def train(self):
@@ -134,7 +134,7 @@ class Trainer(object):
                     return
 
             self.model.train()
-            for j in tqdm(range(self.feed.num_batch)):
+            for j in tqdm(range(self.feed.num_batch), desc='Trainer.{}'.format(self.name)):
                 self.log.debug('{}th batch'.format(j))
                 self.optimizer.zero_grad()
                 input_ = self.feed.next_batch()
@@ -145,7 +145,7 @@ class Trainer(object):
                 self.optimizer.step()
 
 
-            self.log.info('-- {} -- loss: {}'.format(epoch, self.train_loss.epoch_cache))                
+            self.log.info('-- {} -- loss: {}\n'.format(epoch, self.train_loss.epoch_cache))                
             self.train_loss.clear_cache()
             
             for m in self.metrics:
@@ -171,7 +171,7 @@ class Tester(object):
         self.config = config
         self.ROOT_DIR = directory
 
-        self.log = logging.getLogger('{}.{}'.format(__name__, self.name))
+        self.log = logging.getLogger('{}.{}.{}'.format(__name__, self.__class__.__name__, self.name))
 
         self.model = model
 
@@ -192,7 +192,7 @@ class Tester(object):
             f = '{}/{}_best_model_accuracy.txt'.format(self.ROOT_DIR, self.name)
             if os.path.isfile(f):
                 self.best_model = (float(open(f).read().strip()), self.model.cpu().state_dict())
-                log.info('loaded last best accuracy: {}'.format(self.best_model[0]))
+                self.log.info('loaded last best accuracy: {}'.format(self.best_model[0]))
         except:
             log.exception('no last best model')
 
@@ -206,18 +206,18 @@ class Tester(object):
     def __build_stats(self):
         
         # necessary metrics
-        self.test_loss  = EpochAverager(filename = '{}/results/metrics/{}.{}'.format(self.ROOT_DIR, self.name,   'test_loss'))
-        self.accuracy   = EpochAverager(filename = '{}/results/metrics/{}.{}'.format(self.ROOT_DIR, self.name,  'accuracy'))
+        self.test_loss  = EpochAverager(self.config, filename = '{}/results/metrics/{}.{}'.format(self.ROOT_DIR, self.name,   'test_loss'))
+        self.accuracy   = EpochAverager(self.config, filename = '{}/results/metrics/{}.{}'.format(self.ROOT_DIR, self.name,  'accuracy'))
 
         # optional metrics
-        self.tp = EpochAverager(filename = '{}/results/metrics/{}.{}'.format(self.ROOT_DIR,  self.name,   'tp'))
-        self.fp = EpochAverager(filename = '{}/results/metrics/{}.{}'.format(self.ROOT_DIR,  self.name,  'fp'))
-        self.fn = EpochAverager(filename = '{}/results/metrics/{}.{}'.format(self.ROOT_DIR,  self.name,  'fn'))
-        self.tn = EpochAverager(filename = '{}/results/metrics/{}.{}'.format(self.ROOT_DIR,  self.name,  'tn'))
+        self.tp = EpochAverager(self.config, filename = '{}/results/metrics/{}.{}'.format(self.ROOT_DIR,  self.name,   'tp'))
+        self.fp = EpochAverager(self.config, filename = '{}/results/metrics/{}.{}'.format(self.ROOT_DIR,  self.name,  'fp'))
+        self.fn = EpochAverager(self.config, filename = '{}/results/metrics/{}.{}'.format(self.ROOT_DIR,  self.name,  'fn'))
+        self.tn = EpochAverager(self.config, filename = '{}/results/metrics/{}.{}'.format(self.ROOT_DIR,  self.name,  'tn'))
       
-        self.precision = EpochAverager(filename = '{}/results/metrics/{}.{}'.format(self.ROOT_DIR,  self.name,  'precision'))
-        self.recall = EpochAverager(filename = '{}/results/metrics/{}.{}'.format(self.ROOT_DIR,  self.name,  'recall'))
-        self.f1score   = EpochAverager(filename = '{}/results/metrics/{}.{}'.format(self.ROOT_DIR,  self.name,  'f1score'))
+        self.precision = EpochAverager(self.config, filename = '{}/results/metrics/{}.{}'.format(self.ROOT_DIR,  self.name,  'precision'))
+        self.recall = EpochAverager(self.config, filename = '{}/results/metrics/{}.{}'.format(self.ROOT_DIR,  self.name,  'recall'))
+        self.f1score   = EpochAverager(self.config, filename = '{}/results/metrics/{}.{}'.format(self.ROOT_DIR,  self.name,  'f1score'))
 
         self.metrics = [self.test_loss, self.accuracy, self.precision, self.recall, self.f1score]
         
@@ -233,7 +233,7 @@ class Tester(object):
     def do_every_checkpoint(self, epoch, early_stopping=True):
 
         self.model.eval()
-        for j in tqdm(range(self.feed.num_batch)):
+        for j in tqdm(range(self.feed.num_batch), desc='\nTester.{}.checkpoint :{}'.format(self.name, epoch)):
             input_ = self.feed.next_batch()
             output = self.model(input_)
             
@@ -263,7 +263,7 @@ class Tester(object):
                         
             self.log.info('-{}-precision:{}'.format(epoch, self.precision.epoch_cache))
             self.log.info('-{}-recall:{}'.format(epoch, self.recall.epoch_cache))
-            self.log.info('-{}-f1score:{}'.format(epoch, self.f1score.epoch_cache))
+            self.log.info('-{}-f1score:{}\n'.format(epoch, self.f1score.epoch_cache))
 
         if self.best_model[0] < self.accuracy.epoch_cache.avg:
             self.log.info('beat best model...')
@@ -276,7 +276,7 @@ class Tester(object):
 
             if self.predictor and self.best_model[0] > 0.75:
                 log.info('accuracy is greater than 0.75...')
-                if ((self.best_model[0] > self.config.CONFIG.ACCURACY_THRESHOLD  and  (5 * (self.best_model[0] - last_acc) > self.config.CONFIG.ACCURACY_IMPROVEMENT_THRESHOLD))
+                if ((self.best_model[0] >= self.config.CONFIG.ACCURACY_THRESHOLD  and  (5 * (self.best_model[0] - last_acc) > self.config.CONFIG.ACCURACY_IMPROVEMENT_THRESHOLD))
                     or (self.best_model[0] - last_acc) > self.config.CONFIG.ACCURACY_IMPROVEMENT_THRESHOLD):
                     
                     self.predictor.run_prediction(self.accuracy.epoch_cache.avg)
@@ -326,7 +326,7 @@ class Predictor(object):
         self.model = model
         self.ROOT_DIR = directory
 
-        self.log = logging.getLogger('{}.{}'.format(__name__, self.name))
+        self.log = logging.getLogger('{}.{}.{}'.format(__name__, self.__class__.__name__, self.name))
         
         self.repr_function = repr_function
         self.feed = feed
@@ -345,7 +345,7 @@ class Predictor(object):
         dump = open('{}/results/{}_{:0.4f}.csv'.format(self.ROOT_DIR, self.name, accuracy), 'w')
         self.log.info('on {}th eon'.format(accuracy))
         results = ListTable()
-        for ri in tqdm(range(self.feed.num_batch)):
+        for ri in tqdm(range(self.feed.num_batch), desc='running prediction at accuracy: {:0.4f}'.format(accuracy)):
             output, _results = self.predict(ri)
             results.extend(_results)
         dump.write(repr(results))
