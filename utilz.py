@@ -55,8 +55,8 @@ def logger(func, dlevel=logging.INFO):
 from pprint import pprint, pformat
 from tqdm import tqdm as _tqdm
 
-def tqdm(a):
-    return _tqdm(a) if config.CONFIG.tqdm else a
+def tqdm(a, *args, **kwargs):
+    return _tqdm(a, ncols=100,  *args, **kwargs) if config.CONFIG.tqdm else a
 
 
 def squeeze(lol):
