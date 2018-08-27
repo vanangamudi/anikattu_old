@@ -102,13 +102,14 @@ class Trainer(object):
                 self.optimizer.step()
 
 
-            self.log.info('-- {} -- loss: {}\n'.format(epoch, self.train_loss.epoch_cache))                
+            self.log.info('-- {} -- loss: {}\n'.format(epoch, self.train_loss.epoch_cache))
             self.train_loss.clear_cache()
             
             for m in self.metrics:
                 m.write_to_file()
 
         return True
+
 
 class Tester(object):
     def __init__(self, name,
@@ -191,7 +192,7 @@ class Tester(object):
     def do_every_checkpoint(self, epoch, early_stopping=True):
 
         self.model.eval()
-        for j in tqdm(range(self.feed.num_batch), desc='\nTester.{}.checkpoint :{}'.format(self.name, epoch)):
+        for j in tqdm(range(self.feed.num_batch), desc='Tester.{}.checkpoint :{}'.format(self.name, epoch)):
             input_ = self.feed.next_batch()
             output = self.model(input_)
             
