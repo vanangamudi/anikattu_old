@@ -1,5 +1,7 @@
+import os
 import logging
-from config import Config
+import copy
+from config import CONFIG
 from pprint import pprint, pformat
 
 import logging
@@ -10,82 +12,90 @@ log.setLevel(logging.INFO)
 
 from ..debug import memory_consumed
 from ..utilz import ListTable, Averager, tqdm
+from ..utilz import are_weights_same
 
-import random
+from trainer import EpochAverager, FLAGS
+
 import torch
 
 from torch import optim, nn
 from collections import namedtuple
 
-from .trainer import Trainer, Predictor, Feeder, FLAGS
-from ..utilz import Averager, LongVar
+from nltk.corpus import stopwords
+                 
+class Trainer(object):
+    def __init__(self, name,
+                 config,
+                 model,
 
-class Trainer(Trainer):
-    def __init__(self, name, model,feeder,
-                 optimizer, 
-
-                 loss_function,
-                 accuracy_function,
-                 f1score_function,
+                 feed,
+                 optimizer,
                  
                  initial_decoder_input,
+                 teacher_forcing_ratio=0.5,
+                 
+                 loss_function,
                  directory,
                  
-                 teacher_forcing_ratio=0.5,
+                 epochs=1000,
+                 checkpoint=1,
+                 do_every_checkpoint=None,
 
-                 epochs=10000, checkpoint=1,
+                 *args,
+                 **kwargs,
+                 
+    ):
 
-
-                 *args, **kwargs):
-        
         self.name  = name
+        self.config = config
         self.ROOT_DIR = directory
-        assert model != (None, None)
+
+        self.log = logging.getLogger('{}.{}.{}'.format(__name__, self.__class__.__name__, self.name))
+
         self.encoder_model, self.decoder_model = model
-        self.__build_feeder(feeder, *args, **kwargs)
+        self.feed = feed
 
         self.teacher_forcing_ratio = teacher_forcing_ratio
+        
         self.epochs     = epochs
-        self.checkpoint = checkpoint
+        self.checkpoint = min(checkpoint, epochs)
 
-        self.accuracy_function = accuracy_function if accuracy_function else self._default_accuracy_function
+        self.do_every_checkpoint = do_every_checkpoint if not do_every_checkpoint == None else lambda x: FLAGS.CONTINUE_TRAINING
+
         self.loss_function = loss_function if loss_function else nn.NLLLoss()
-        self.f1score_function = f1score_function
-
-        if optimizer != (None, None):
-            self.encoder_optimizer, self.decoder_optimizer = optimizer
-        else:
-            self.encoder_optimizer, self.decoder_optimizer = (
-                optim.SGD(self.encoder_model.parameters(),lr=0.001, momentum=0.1),
-                optim.SGD(self.decoder_model.parameters(),lr=0.001, momentum=0.1)
-            )
+        self.optimizer = optimizer if optimizer else optim.SGD(self.model.parameters(),
+                                                               lr=0.01, momentum=0.1)
 
         self.__build_stats()
-        self.best_model = (0, (self.encoder_model.state_dict(), self.decoder_model.state_dict())
-        )
+        self.best_model = (0, (self.encoder_model.state_dict(), self.decoder_model.state_dict()))
+                           
+        if self.config.CONFIG.cuda:
+            self.encoder_model.cuda()
+            self.decoder_model.cuda()
 
-    def save_best_model(self):
-        log.info('saving the last best model...')
-        torch.save(self.best_model[1][0],  '{}/weights/encoder.{:0.4f}.{}'.format(self.ROOT_DIR, self.best_model[0], 'pth'))
-        torch.save(self.best_model[1][0],  '{}/weights/decoder.{:0.4f}.{}'.format(self.ROOT_DIR, self.best_model[0], 'pth'))
-
+                           
+    def __build_stats(self):
+        # necessary metrics
+        self.train_loss = EpochAverager(self.config, filename = '{}/results/metrics/{}.{}'.format(self.ROOT_DIR, self.name,  'train_loss'))
+        self.metrics = [self.train_loss]
 
     def train(self):
-        self.encoder_model.train()
-        self.decoder_model.train()
         for epoch in range(self.epochs):
-            log.critical('memory consumed : {}'.format(memory_consumed()))         
+            self.log.critical('memory consumed : {}'.format(memory_consumed()))            
 
-            if self.do_every_checkpoint(epoch) == FLAGS.STOP_TRAINING:
-                log.info('loss trend suggests to stop training')
-                return
-            
-            for j in tqdm(range(self.feeder.train.num_batch)):
+            if epoch % max(1, (self.checkpoint - 1)) == 0:
+                if self.do_every_checkpoint(epoch) == FLAGS.STOP_TRAINING:
+                    self.log.info('loss trend suggests to stop training')
+                    return
+                           
+            self.encoder_model.train()
+            self.decoder_model.train()
+            for j in tqdm(range(self.feed.num_batch), desc='Trainer.{}'.format(self.name)):
                 log.debug('{}th batch'.format(j))
                 self.encoder_optimizer.zero_grad()
                 self.decoder_optimizer.zero_grad()
 
-                input_ = self.feeder.train.next_batch()
+                input_ = self.feed.next_batch()
                 idxs, inputs, targets = input_
                 encoder_output = self.encoder_model(input_)
                 loss = 0
@@ -98,21 +108,109 @@ class Trainer(Trainer):
                     
                 loss.backward()
                 
+                self.train_loss.cache(loss.data.item())
+                loss.backward()
                 #nn.utils.clip_grad_norm(self.encoder_model.parameters(), Config.max_grad_norm)
                 #nn.utils.clip_grad_norm(self.decoder_model.parameters(), Config.max_grad_norm)
                 self.encoder_optimizer.step()
                 self.decoder_optimizer.step()
-                self.train_loss.append(loss.data[0])
-                
-            log.info('-- {} -- loss: {}'.format(epoch, self.train_loss))            
+
+
+            self.log.info('-- {} -- loss: {}\n'.format(epoch, self.train_loss.epoch_cache))
+            self.train_loss.clear_cache()
             
             for m in self.metrics:
                 m.write_to_file()
-        
-        self.encoder_model.eval()
-        self.decoder_model.eval()
+
         return True
+
+
+class Tester(object):
+    def __init__(self, name,
+                 config,
+                 model,
+                 feed,
+                 loss_function,
+                 accuracy_function,
+                 directory,
+                 f1score_function=None,
+                 best_model=None,
+                 predictor=None,
+                 save_model_weights=True,
+    ):
+
+        self.name  = name
+        self.config = config
+        self.ROOT_DIR = directory
+
+        self.log = logging.getLogger('{}.{}.{}'.format(__name__, self.__class__.__name__, self.name))
+
+        self.model = model
+
+        self.feed = feed
+
+        self.predictor = predictor
+
+        self.accuracy_function = accuracy_function if accuracy_function else self._default_accuracy_function
+        self.loss_function = loss_function if loss_function else nn.NLLLoss()
+        self.f1score_function = f1score_function
         
+
+        self.__build_stats()
+
+        self.save_model_weights = save_model_weights
+        self.best_model = (0.000001, self.model.cpu().state_dict())
+        try:
+            f = '{}/{}_best_model_accuracy.txt'.format(self.ROOT_DIR, self.name)
+            if os.path.isfile(f):
+                self.best_model = (float(open(f).read().strip()), self.model.cpu().state_dict())
+                self.log.info('loaded last best accuracy: {}'.format(self.best_model[0]))
+        except:
+            log.exception('no last best model')
+
+                        
+        self.best_model_criteria = self.accuracy
+        self.save_best_model()
+
+        if self.config.CONFIG.cuda:
+            self.model.cuda()
+        
+    def __build_stats(self):
+        
+        # necessary metrics
+        self.mfile_prefix = '{}/results/metrics/{}'.format(self.ROOT_DIR, self.name)
+        self.test_loss  = EpochAverager(self.config, filename = '{}.{}'.format(self.mfile_prefix,   'test_loss'))
+        self.accuracy   = EpochAverager(self.config, filename = '{}.{}'.format(self.mfile_prefix,  'accuracy'))
+
+        # optional metrics
+        self.tp = EpochAverager(self.config, filename = '{}.{}'.format(self.mfile_prefix,  'tp'))
+        self.fp = EpochAverager(self.config, filename = '{}.{}'.format(self.mfile_prefix,  'fp'))
+        self.fn = EpochAverager(self.config, filename = '{}.{}'.format(self.mfile_prefix,  'fn'))
+        self.tn = EpochAverager(self.config, filename = '{}.{}'.format(self.mfile_prefix,  'tn'))
+      
+        self.precision = EpochAverager(self.config, filename = '{}.{}'.format(self.mfile_prefix,  'precision'))
+        self.recall = EpochAverager(self.config, filename = '{}.{}'.format(self.mfile_prefix,  'recall'))
+        self.f1score   = EpochAverager(self.config, filename = '{}.{}'.format(self.mfile_prefix,  'f1score'))
+
+        self.metrics = [self.test_loss, self.accuracy, self.precision, self.recall, self.f1score]
+        
+    def save_best_model(self):
+        with open('{}/{}_best_model_accuracy.txt'.format(self.ROOT_DIR, self.name), 'w') as f:
+            f.write(str(self.best_model[0]))
+
+        if self.save_model_weights:
+            log.info('saving the last best model...')
+            self.log.info('saving the last best model with accuracy {}...'.format(self.best_model[0]))
+            torch.save(self.best_model[1][0],
+                       '{}/weights/encoder.{:0.4f}.{}'.format(self.ROOT_DIR, self.best_model[0], 'pth'))
+            torch.save(self.best_model[1][0],
+                       '{}/weights/decoder.{:0.4f}.{}'.format(self.ROOT_DIR, self.best_model[0], 'pth'))
+
+            torch.save(self.best_model[1][0],
+                       '{}/weights/encoder.{:0.4f}.{}'.format(self.ROOT_DIR, self.name, 'pth'))
+            torch.save(self.best_model[1][0],
+                       '{}/weights/decoder.{:0.4f}.{}'.format(self.ROOT_DIR, self.name, 'pth'))
+
     def do_every_checkpoint(self, epoch, early_stopping=True):
         if epoch % self.checkpoint != 0:
             return
@@ -139,45 +237,102 @@ class Trainer(Trainer):
             self.accuracy.cache(accuracy.item()/ti)
 
             if self.f1score_function:
-                precision, recall, f1score = self.f1score_function(decoder_outputs, input_, j)
-                self.precision.append(precision)
-                self.recall.append(recall)
-                self.f1score.append(f1score)
-                
-        self.encoder_model.train()
-        self.decoder_model.train()
-            
-        log.info('-- {} -- loss: {}, accuracy: {}'.format(epoch,
-                                                          self.test_loss.epoch_cache,
-                                                          self.accuracy.epoch_cache))
+                (tp, fn, fp, tn), precision, recall, f1score = self.f1score_function(output,
+                                                                                     input_, j)
+
+                self.tp.cache(tp)
+                self.fn.cache(fn)
+                self.fp.cache(fp)
+                self.tn.cache(tn)
+                self.precision.cache(precision)
+                self.recall.cache(recall)
+                self.f1score.cache(f1score)
+
+        self.log.info('= {} =loss:{}'.format(epoch, self.test_loss.epoch_cache))
+        self.log.info('- {} -accuracy:{}'.format(epoch, self.accuracy.epoch_cache))
         if self.f1score_function:
-            log.info('-- {} -- precision: {}'.format(epoch, self.precision))
-            log.info('-- {} -- recall: {}'.format(epoch, self.recall))
-            log.info('-- {} -- f1score: {}'.format(epoch, self.f1score))
+            self.log.info('- {} -tp:{}'.format(epoch, sum(self.tp.epoch_cache)))
+            self.log.info('- {} -fn:{}'.format(epoch, sum(self.fn.epoch_cache)))
+            self.log.info('- {} -fp:{}'.format(epoch, sum(self.fp.epoch_cache)))
+            self.log.info('- {} -tn:{}'.format(epoch, sum(self.tn.epoch_cache)))
+                        
+            self.log.info('- {} -precision:{}'.format(epoch, self.precision.epoch_cache))
+            self.log.info('- {} -recall:{}'.format(epoch, self.recall.epoch_cache))
+            self.log.info('- {} -f1score:{}\n'.format(epoch, self.f1score.epoch_cache))
+
+        if self.best_model[0] < self.accuracy.epoch_cache.avg:
+            self.log.info('beat best model...')
+            last_acc = self.best_model[0]
+            self.best_model = (self.accuracy.epoch_cache.avg,
+                               (self.encoder_model.state_dict(),
+                                self.decoder_model.state_dict())
+            )
+            self.save_best_model()
+            
+            if self.config.CONFIG.cuda:
+                self.model.cuda()
+
+            if self.predictor and self.best_model[0] > 0.75:
+                log.info('accuracy is greater than 0.75...')
+                if ((self.best_model[0] >= self.config.CONFIG.ACCURACY_THRESHOLD  and  (5 * (self.best_model[0] - last_acc) > self.config.CONFIG.ACCURACY_IMPROVEMENT_THRESHOLD))
+                    or (self.best_model[0] - last_acc) > self.config.CONFIG.ACCURACY_IMPROVEMENT_THRESHOLD):
+                    
+                    self.predictor.run_prediction(self.accuracy.epoch_cache.avg)
+                
 
         self.test_loss.clear_cache()
         self.accuracy.clear_cache()
-        if self.best_model[0] <= self.accuracy.avg:
-            self.best_model = (self.accuracy.avg, (self.encoder_model.state_dict(), self.decoder_model.state_dict()))
-            self.save_best_model()
-
+        self.tp.clear_cache()
+        self.fn.clear_cache()
+        self.fp.clear_cache()
+        self.tn.clear_cache()
+        self.f1score.clear_cache()
+        self.precision.clear_cache()
+        self.recall.clear_cache()
+        
+        for m in self.metrics:
+            m.write_to_file()
+            
         if early_stopping:
             return self.loss_trend()
 
+    def loss_trend(self, total_count=10):
+        if len(self.test_loss) > 4:
+            losses = self.test_loss[-4:]
+            count = 0
+            for l, r in zip(losses, losses[1:]):
+                if l < r:
+                    count += 1
+                    
+            if count > total_count:
+                return FLAGS.STOP_TRAINING
 
-            
+        return FLAGS.CONTINUE_TRAINING
+
+
+    def _default_accuracy_function(self):
+        return -1
+    
+    
 class Predictor(object):
-    def __init__(self, model, feed, repr_function, process_output, *args, **kwargs):
-
+    def __init__(self, name, model,
+                 feed,
+                 repr_function,
+                 process_output,
+                 directory,
+                 
+                 *args, **kwargs):
+        self.name = name
+        self.ROOT_DIR = directory
+                           
         self.encoder_model, self.decoder_model = model
-        self.__build_feed(feed, *args, **kwargs)
         self.repr_function = repr_function
         self.process_output = process_output
-        
-    def __build_feed(self, feed, *args, **kwargs):
-        assert feed is not None, 'feed is None, fatal error'
+
+        self.log = logging.getLogger('{}.{}.{}'.format(__name__, self.__class__.__name__, self.name))
+
         self.feed = feed
-        
+
     def predict(self,  batch_index=0, max_decoder_len=10):
         log.debug('batch_index: {}'.format(batch_index))
         idxs, i, *__ = self.feed.nth_batch(batch_index)
@@ -200,3 +355,15 @@ class Predictor(object):
         result = self.repr_function(decoder_outputs, input_)
         results.extend(result)
         return decoder_outputs, results
+
+    def run_prediction(self, accuracy):        
+        dump = open('{}/results/{}_{:0.4f}.csv'.format(self.ROOT_DIR, self.name, accuracy), 'w')
+        self.log.info('on {}th eon'.format(accuracy))
+        results = ListTable()
+        for ri in tqdm(
+                range(self.feed.num_batch),
+                desc='running prediction at accuracy: {:0.4f}'.format(accuracy)):
+            output, _results = self.predict(ri)
+            results.extend(_results)
+        dump.write(repr(results))
+        dump.close()
