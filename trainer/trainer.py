@@ -1,7 +1,6 @@
 import os
 import logging
 import copy
-from config import CONFIG
 from pprint import pprint, pformat
 
 import logging
@@ -165,8 +164,10 @@ class Tester(object):
         
         # necessary metrics
         self.mfile_prefix = '{}/results/metrics/{}'.format(self.ROOT_DIR, self.name)
-        self.test_loss  = EpochAverager(self.config, filename = '{}.{}'.format(self.mfile_prefix,   'test_loss'))
-        self.accuracy   = EpochAverager(self.config, filename = '{}.{}'.format(self.mfile_prefix,  'accuracy'))
+        self.test_loss  = EpochAverager(self.config,
+                                        filename = '{}.{}'.format(self.mfile_prefix,   'test_loss'))
+        self.accuracy   = EpochAverager(self.config,
+                                        filename = '{}.{}'.format(self.mfile_prefix,  'accuracy'))
 
         # optional metrics
         self.tp = EpochAverager(self.config, filename = '{}.{}'.format(self.mfile_prefix,   'tp'))
@@ -174,9 +175,12 @@ class Tester(object):
         self.fn = EpochAverager(self.config, filename = '{}.{}'.format(self.mfile_prefix,  'fn'))
         self.tn = EpochAverager(self.config, filename = '{}.{}'.format(self.mfile_prefix,  'tn'))
       
-        self.precision = EpochAverager(self.config, filename = '{}.{}'.format(self.mfile_prefix,  'precision'))
-        self.recall = EpochAverager(self.config, filename = '{}.{}'.format(self.mfile_prefix,  'recall'))
-        self.f1score   = EpochAverager(self.config, filename = '{}.{}'.format(self.mfile_prefix,  'f1score'))
+        self.precision = EpochAverager(self.config,
+                                       filename = '{}.{}'.format(self.mfile_prefix,  'precision'))
+        self.recall    = EpochAverager(self.config,
+                                       filename = '{}.{}'.format(self.mfile_prefix,  'recall'))
+        self.f1score   = EpochAverager(self.config,
+                                       filename = '{}.{}'.format(self.mfile_prefix,  'f1score'))
 
         self.metrics = [self.test_loss, self.accuracy, self.precision, self.recall, self.f1score]
         
@@ -186,13 +190,19 @@ class Tester(object):
 
         if self.save_model_weights:
             self.log.info('saving the last best model with accuracy {}...'.format(self.best_model[0]))
-            torch.save(self.best_model[1], '{}/weights/{:0.4f}.{}'.format(self.ROOT_DIR, self.best_model[0], 'pth'))
-            torch.save(self.best_model[1], '{}/weights/{}.{}'.format(self.ROOT_DIR, self.name, 'pth'))
+
+            torch.save(self.best_model[1],
+                       '{}/weights/{:0.4f}.{}'.format(self.ROOT_DIR, self.best_model[0], 'pth'))
+            
+            torch.save(self.best_model[1],
+                       '{}/weights/{}.{}'.format(self.ROOT_DIR, self.name, 'pth'))
 
     def do_every_checkpoint(self, epoch, early_stopping=True):
 
         self.model.eval()
-        for j in tqdm(range(self.feed.num_batch), desc='Tester.{}.checkpoint :{}'.format(self.name, epoch)):
+        for j in tqdm(range(self.feed.num_batch),
+                      desc='Tester.{}.checkpoint :{}'.format(self.name, epoch)
+        ):
             input_ = self.feed.next_batch()
             output = self.model(input_)
             
