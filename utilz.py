@@ -179,6 +179,10 @@ def init_hidden(config, batch_size, cell):
         if config.CONFIG.cuda:
             hidden  = hidden.cuda()
         return hidden
+
+class FLAGS:
+    CONTINUE_TRAINING = 0
+    STOP_TRAINING = 1
     
 class Averager(list):
     def __init__(self, config, filename=None, ylim=None, *args, **kwargs):
@@ -237,6 +241,20 @@ class Averager(list):
                 f.write(self.__str__() + '\n')
                 f.flush()
 
+    
+
+class EpochAverager(Averager):
+    def __init__(self, config, filename=None, *args, **kwargs):
+        super(EpochAverager, self).__init__(config, filename, *args, **kwargs)
+        self.config = config
+        self.epoch_cache = Averager(config, filename, *args, *kwargs)
+
+    def cache(self, a):
+        self.epoch_cache.append(a)
+
+    def clear_cache(self):
+        super(EpochAverager, self).append(self.epoch_cache.avg)
+        self.epoch_cache.empty();
                 
 
 # Python program to find SHA256 hash string of a file
