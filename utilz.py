@@ -158,9 +158,9 @@ def Var(config, array, requires_grad=False):
 
     return ret
 
-def init_hidden(batch_size, cell):
+def init_hidden(config, batch_size, cell):
     layers = 1
-    if isinstance(cell, (nn.LSTMCell, nn.GRUCell)):
+    if isinstance(cell, (nn.LSTM, nn.GRU)):
         layers = cell.num_layers
         if cell.bidirectional:
             layers = layers * 2
