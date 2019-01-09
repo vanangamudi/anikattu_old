@@ -148,10 +148,10 @@ def are_weights_same(model1, model2):
             return False
     return True
 
-def LongVar(array, requires_grad=False):
-    return Var(array, requires_grad).long()
+def LongVar(config, array, requires_grad=False):
+    return Var(config, array, requires_grad).long()
 
-def Var(array, requires_grad=False):
+def Var(config, array, requires_grad=False):
     ret =  Variable(torch.Tensor(array), requires_grad=requires_grad)
     if config.CONFIG.cuda:
         ret = ret.cuda()
@@ -160,7 +160,7 @@ def Var(array, requires_grad=False):
 
 def init_hidden(batch_size, cell):
     layers = 1
-    if isinstance(cell, (nn.LSTM, nn.GRU, nn.LSTMCell, nn.GRUCell)):
+    if isinstance(cell, (nn.LSTMCell, nn.GRUCell)):
         layers = cell.num_layers
         if cell.bidirectional:
             layers = layers * 2

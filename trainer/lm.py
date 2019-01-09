@@ -20,6 +20,7 @@ from ..utilz import are_weights_same
 
 from .trainer import EpochAverager, FLAGS
 from .trainer import Trainer, Tester
+from ..utilz import Var, LongVar
 
 
 import torch
@@ -88,8 +89,6 @@ class Trainer(Trainer):
                            
             self.model.train()
             for j in tqdm(range(self.feed.num_batch), desc='Trainer.{}'.format(self.name)):
-                log.debug('{}th batch'.format(j))
-                
                 input_ = self.feed.next_batch()
                 idxs, inputs, targets = input_
                 sequence = inputs[0].transpose(0,1)
@@ -97,8 +96,9 @@ class Trainer(Trainer):
 
                 state = self.model.initial_hidden(batch_size)
                 loss = 0
-                for ti in range(sequence.size(0) - 1):
-                    output = self.model(sequence[ti], state)
+                output = sequence[0]
+                for ti in range(1, sequence.size(0) - 1):
+                    output = self.model(output, state)
                     loss += self.loss_function(ti, output, input_)
                     output, state = output
                     output = output.max(1)[1]
@@ -175,22 +175,28 @@ class Tester(Tester):
     def do_every_checkpoint(self, epoch, early_stopping=True):
 
         self.model.eval()
-        for j in tqdm(range(self.feed.num_batch)):
+        for j in tqdm(range(self.feed.num_batch), desc='Tester.{}'.format(self.name)):
             input_ = self.feed.next_batch()
             idxs, inputs, targets = input_
             sequence = inputs[0].transpose(0,1)
+            _, batch_size = sequence.size()
+            
+            state = self.model.initial_hidden(batch_size)
+            loss, accuracy = Var(self.config, [0]), Var(self.config, [0])
+            output = sequence[0]
             outputs = []
-            loss, accuracy = 0, 0
-            for ti in range(sequence.size(0) - 1):
-                output, state = self.model(sequence[ti], state)
+            for ti in range(1, sequence.size(0) - 1):
+                output = self.model(output, state)
                 loss += self.loss_function(ti, output, input_)
-                accuracy += self.accuracy_function(ti, decoder_output, input_)
+                accuracy += self.accuracy_function(ti, output, input_)
+                output, state = output
+                output = output.max(1)[1]
                 outputs.append(output)
-                        
+                
             self.test_loss.cache(loss.item())
             if ti == 0: ti = 1
             self.accuracy.cache(accuracy.item()/ti)
-            print('====', self.test_loss, self.test_accuracy)
+            #print('====', self.test_loss, self.accuracy)
 
         self.log.info('= {} =loss:{}'.format(epoch, self.test_loss.epoch_cache))
         self.log.info('- {} -accuracy:{}'.format(epoch, self.accuracy.epoch_cache))
@@ -199,8 +205,8 @@ class Tester(Tester):
             self.log.info('beat best model...')
             last_acc = self.best_model[0]
             self.best_model = (self.accuracy.epoch_cache.avg,
-                               (self.encoder_model.state_dict(),
-                                self.decoder_model.state_dict())
+                               (self.model.state_dict())
+                               
             )
             self.save_best_model()
             
@@ -209,8 +215,13 @@ class Tester(Tester):
 
             if self.predictor and self.best_model[0] > 0.75:
                 log.info('accuracy is greater than 0.75...')
-                if ((self.best_model[0] >= self.config.CONFIG.ACCURACY_THRESHOLD  and  (5 * (self.best_model[0] - last_acc) > self.config.CONFIG.ACCURACY_IMPROVEMENT_THRESHOLD))
-                    or (self.best_model[0] - last_acc) > self.config.CONFIG.ACCURACY_IMPROVEMENT_THRESHOLD):
+                if ((
+                        self.best_model[0] >= self.config.CONFIG.ACCURACY_THRESHOLD and
+                        ( 5*(self.best_model[0] - last_acc) >
+                          self.config.CONFIG.ACCURACY_IMPROVEMENT_THRESHOLD))
+                    or (self.best_model[0] - last_acc) 
+                    > self.config.CONFIG.ACCURACY_IMPROVEMENT_THRESHOLD
+                ):
                     
                     self.predictor.run_prediction(self.accuracy.epoch_cache.avg)
                 
@@ -245,24 +256,27 @@ class Predictor(object):
     def predict(self,  batch_index=0, max_decoder_len=10):
         log.debug('batch_index: {}'.format(batch_index))
         idxs, i, *__ = self.feed.nth_batch(batch_index)
+        outputs = []
         self.model.eval()
-        decoder_outputs = []
         input_ = self.feed.next_batch()
         idxs, inputs, targets = input_
-        encoder_output = self.encoder_model(input_)
+        sequence = inputs[0].transpose(0,1)
+        _, batch_size = sequence.size()
+        
+        state = self.model.initial_hidden(batch_size)
         loss = 0
-
+        output = sequence[0]
+        for ti in range(1, sequence.size(0) - 1):
+            output = self.model(output, state)
+            output, state = output
+            output = output.max(1)[1]
+            outputs.append(output)
+                        
         results = ListTable()
-        decoder_input = self.decoder_model.initial_input(input_, encoder_output)
-        for ti in range(max_decoder_len):
-            decoder_output = self.decoder_model(input_, encoder_output, decoder_input)
-            decoder_output, decoder_input = self.process_output(ti, decoder_output, input_)
-            decoder_outputs.append(decoder_output)
-                            
-        decoder_outputs = torch.stack(decoder_outputs)
-        result = self.repr_function(decoder_outputs, input_)
+        outputs = torch.stack(outputs)
+        result = self.repr_function(outputs, input_)
         results.extend(result)
-        return decoder_outputs, results
+        return outputs, results
 
     def run_prediction(self, accuracy):        
         dump = open('{}/results/{}_{:0.4f}.csv'.format(self.ROOT_DIR, self.name, accuracy), 'w')
