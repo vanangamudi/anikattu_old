@@ -1,4 +1,3 @@
-import config
 from pprint import pprint, pformat
 
 import os
@@ -59,7 +58,7 @@ from pprint import pprint, pformat
 from tqdm import tqdm as _tqdm
 
 def tqdm(a, *args, **kwargs):
-    return _tqdm(a, ncols=100,  *args, **kwargs) if config.CONFIG.tqdm else a
+    return _tqdm(a, ncols=100,  *args, **kwargs) # if config.CONFIG.tqdm else a
 
 
 def squeeze(lol):

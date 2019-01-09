@@ -1,4 +1,3 @@
-from config import CONFIG
 from pprint import pprint, pformat
 
 import logging
@@ -9,8 +8,8 @@ log.setLevel(logging.INFO)
 
 import random
 
-from .utilz import tqdm
-from .debug import memory_consumed
+from anikattu.utilz import tqdm
+from anikattu.debug import memory_consumed
 
 from collections import Counter
 
