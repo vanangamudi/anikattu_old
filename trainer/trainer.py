@@ -155,7 +155,7 @@ class Tester(object):
 
                         
         self.best_model_criteria = self.accuracy
-        self.save_best_model()
+        self.save_best_model() #BUG: this shouldn't be part of __init__(), this destroy the weights in the pth file by overwriting before you can restore which you can do only after __init__()
 
         if self.config.CONFIG.cuda:
             self.model.cuda()
