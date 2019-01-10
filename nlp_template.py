@@ -260,6 +260,9 @@ def experiment(config, ROOT_DIR, model, VOCAB, LABELS, datapoints=[[], [], []], 
         
         for e in range(eons):
 
+            if not trainer.train():
+                raise Exception
+
             predictor.model.load_state_dict(trainer.best_model[1])
             
             dump = open('{}/results/eon_{}.csv'.format(ROOT_DIR, e), 'w')
@@ -272,9 +275,6 @@ def experiment(config, ROOT_DIR, model, VOCAB, LABELS, datapoints=[[], [], []], 
             dump.close()
             
             
-
-            if not trainer.train():
-                raise Exception
 
 
     except KeyboardInterrupt:
