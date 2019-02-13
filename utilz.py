@@ -16,6 +16,11 @@ from torch.autograd import Variable
 
 from collections import namedtuple, defaultdict
 
+class FLAGS:
+    CONTINUE_TRAINING = 0
+    STOP_TRAINING = 1
+
+
 """
     Local Utilities, Helper Functions
 
@@ -58,7 +63,7 @@ from pprint import pprint, pformat
 from tqdm import tqdm as _tqdm
 
 def tqdm(a, *args, **kwargs):
-    return _tqdm(a, ncols=100,  *args, **kwargs) # if config.CONFIG.tqdm else a
+    return _tqdm(a, ncols=80,  *args, **kwargs) # if config.CONFIG.tqdm else a
 
 
 def squeeze(lol):
@@ -179,10 +184,6 @@ def init_hidden(config, batch_size, cell):
         if config.CONFIG.cuda:
             hidden  = hidden.cuda()
         return hidden
-
-class FLAGS:
-    CONTINUE_TRAINING = 0
-    STOP_TRAINING = 1
     
 class Averager(list):
     def __init__(self, config, filename=None, ylim=None, *args, **kwargs):
@@ -241,20 +242,6 @@ class Averager(list):
                 f.write(self.__str__() + '\n')
                 f.flush()
 
-    
-
-class EpochAverager(Averager):
-    def __init__(self, config, filename=None, *args, **kwargs):
-        super(EpochAverager, self).__init__(config, filename, *args, **kwargs)
-        self.config = config
-        self.epoch_cache = Averager(config, filename, *args, *kwargs)
-
-    def cache(self, a):
-        self.epoch_cache.append(a)
-
-    def clear_cache(self):
-        super(EpochAverager, self).append(self.epoch_cache.avg)
-        self.epoch_cache.empty();
                 
 
 # Python program to find SHA256 hash string of a file
@@ -271,3 +258,46 @@ def hash_file(filename):
     return sha256_hash.hexdigest()
 
 
+
+def dump_vocab_tsv(config, vocab, embedding, filepath):
+    assert embedding.shape[0] == len(vocab)
+
+    vector_filepath = filepath.replace('.tsv', '.vector.tsv')
+    token_filepath  = filepath.replace('.tsv', '.token.tsv')
+
+    vector_file = open(vector_filepath, 'w')
+    token_file  = open(token_filepath,  'w')
+    
+    for i, vector in enumerate(embedding):
+        vector_file.write('\t'.join([str(v) for v in vector]) + '\n')
+        token_file.write(vocab[i] + '\n')
+
+    vector_file.close()
+    token_file.close()
+
+
+def dump_cosine_similarity_tsv(config, vocab, embedding, filepath, count=100):
+    assert embedding.shape[0] == len(vocab)
+
+    matrix_filepath = filepath.replace('.tsv', '.matrix.pkl')
+    similar_filepath = filepath.replace('.tsv', '.similar.tsv')
+    dissimilar_filepath  = filepath.replace('.tsv', '.dissimilar.tsv')
+
+    e_norm = embedding / embedding.norm(dim=1)[:, None]
+    scores = torch.mm(e_norm, e_norm.t())
+
+    pickle.dump(scores.cpu().numpy(), open(matrix_filepath, 'wb'))
+
+    similars = scores.topk(count, dim=1)[1]
+    dissimilars = (1 - scores).topk(count, dim=1)[1]
+
+
+    similar_file = open(similar_filepath, 'w')
+    dissimilar_file  = open(dissimilar_filepath,  'w')
+    
+    for i in range(len(vocab)):
+        similar_file.write('|'.join(vocab.index2word[j] for j in similars[i]) + '\n')
+        dissimilar_file.write('|'.join(vocab.index2word[j] for j in dissimilars[i]) + '\n')
+    
+    similar_file.close()
+    dissimilar_file.close()
