@@ -111,10 +111,10 @@ class DataFeed(object):
             
         b =    self.data[ n * batch_size   :   (n+1) * batch_size ]
         if len(b) < 1:
-            if not (n - 1) < 0:
-                self.nth_batch(n-1, batch_size, apply_batchop)
+            if not (n - 1) > 0:
+                return self.nth_batch(n-1, batch_size, apply_batchop)
             else:
-                self.nth_batch(0, batch_size, apply_batchop)
+                return self.nth_batch(0, batch_size, apply_batchop)
                 
         if apply_batchop:
             return self._batchop(b)
