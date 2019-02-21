@@ -28,21 +28,50 @@ class FLAGS:
 def mkdir_if_exist_not(name):
     if not os.path.isdir(name):
         return os.mkdir(name)
-    
-def initialize_task(hpconfig = 'hpconfig.py', prefix='run00'):
-    log.info('loading hyperparameters from {}'.format(hpconfig))
-    root_dir = hpconfig.replace('.py', '') + '__' + hash_file(hpconfig)[-6:]
+
+def copytree(src, dst, symlinks=False, ignore=None):
+    for item in os.listdir(src):
+        s = os.path.join(src, item)
+        d = os.path.join(dst, item)
+        if os.path.isdir(s):
+            shutil.copytree(s, d, symlinks, ignore)
+        else:
+            shutil.copy2(s, d)
+
+def copytree2(src, dst, symlinks=False, ignore=None):
+    for item in os.listdir(src):
+        s = os.path.join(src, item)
+        d = os.path.join(dst, item)
+        if os.path.isdir(s):
+            copytree2(s, d, symlinks, ignore)
+        else:
+            shutil.copy2(s, d)
+          
+def initialize_task(hpconfig = 'hpconfig.py', prefix='run00', base_hpconfig=None):
+
     mkdir_if_exist_not(prefix)
-    root_dir = '{}/{}'.format(prefix, root_dir)
+
+    log.info('loading hyperparameters from {}'.format(hpconfig))
+    root_dir = '{}/{}__{}'.format(prefix, hpconfig.replace('.py', ''), hash_file(hpconfig)[-6:])
+    
     mkdir_if_exist_not(root_dir)
     mkdir_if_exist_not('{}/results'.format(root_dir))
     mkdir_if_exist_not('{}/results/metrics'.format(root_dir))
     mkdir_if_exist_not('{}/weights'.format(root_dir))
     mkdir_if_exist_not('{}/plots'.format(root_dir))
 
-    shutil.copy(hpconfig, root_dir)
-    shutil.copy('config.py', root_dir)
+    if base_hpconfig:
+        log.info(' basis hpconfig from {}'.format(base_hpconfig))
+        
+        src_root_dir = '{}/{}__{}'.format(prefix,
+                                          os.path.basename(base_hpconfig).replace('.py', ''),
+                                          hash_file(base_hpconfig)[-6:])
 
+        copytree2(src_root_dir, root_dir)
+        
+    shutil.copy(hpconfig,    root_dir)
+    shutil.copy('config.py', root_dir)
+    
     return root_dir
 
 """
