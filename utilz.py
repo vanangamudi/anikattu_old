@@ -16,6 +16,11 @@ from torch.autograd import Variable
 
 from collections import namedtuple, defaultdict
 
+class FLAGS:
+    CONTINUE_TRAINING = 0
+    STOP_TRAINING = 1
+
+
 """
     Local Utilities, Helper Functions
 
@@ -23,21 +28,50 @@ from collections import namedtuple, defaultdict
 def mkdir_if_exist_not(name):
     if not os.path.isdir(name):
         return os.mkdir(name)
-    
-def initialize_task(hpconfig = 'hpconfig.py', prefix='run00'):
-    log.info('loading hyperparameters from {}'.format(hpconfig))
-    root_dir = hpconfig.replace('.py', '') + '__' + hash_file(hpconfig)[-6:]
+
+def copytree(src, dst, symlinks=False, ignore=None):
+    for item in os.listdir(src):
+        s = os.path.join(src, item)
+        d = os.path.join(dst, item)
+        if os.path.isdir(s):
+            shutil.copytree(s, d, symlinks, ignore)
+        else:
+            shutil.copy2(s, d)
+
+def copytree2(src, dst, symlinks=False, ignore=None):
+    for item in os.listdir(src):
+        s = os.path.join(src, item)
+        d = os.path.join(dst, item)
+        if os.path.isdir(s):
+            copytree2(s, d, symlinks, ignore)
+        else:
+            shutil.copy2(s, d)
+          
+def initialize_task(hpconfig = 'hpconfig.py', prefix='run00', base_hpconfig=None):
+
     mkdir_if_exist_not(prefix)
-    root_dir = '{}/{}'.format(prefix, root_dir)
+
+    log.info('loading hyperparameters from {}'.format(hpconfig))
+    root_dir = '{}/{}__{}'.format(prefix, hpconfig.replace('.py', ''), hash_file(hpconfig)[-6:])
+    
     mkdir_if_exist_not(root_dir)
     mkdir_if_exist_not('{}/results'.format(root_dir))
     mkdir_if_exist_not('{}/results/metrics'.format(root_dir))
     mkdir_if_exist_not('{}/weights'.format(root_dir))
     mkdir_if_exist_not('{}/plots'.format(root_dir))
 
-    shutil.copy(hpconfig, root_dir)
-    shutil.copy('config.py', root_dir)
+    if base_hpconfig:
+        log.info(' basis hpconfig from {}'.format(base_hpconfig))
+        
+        src_root_dir = '{}/{}__{}'.format(prefix,
+                                          os.path.basename(base_hpconfig).replace('.py', ''),
+                                          hash_file(base_hpconfig)[-6:])
 
+        copytree2(src_root_dir, root_dir)
+        
+    shutil.copy(hpconfig,    root_dir)
+    shutil.copy('config.py', root_dir)
+    
     return root_dir
 
 """
@@ -58,7 +92,7 @@ from pprint import pprint, pformat
 from tqdm import tqdm as _tqdm
 
 def tqdm(a, *args, **kwargs):
-    return _tqdm(a, ncols=100,  *args, **kwargs) # if config.CONFIG.tqdm else a
+    return _tqdm(a, ncols=80,  *args, **kwargs) # if config.CONFIG.tqdm else a
 
 
 def squeeze(lol):
@@ -285,6 +319,10 @@ def hash_file(filename):
     return sha256_hash.hexdigest()
 
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> 6bc1f5ca614dd6bf39ec02577fbe8525630cfb32
 def dump_vocab_tsv(config, vocab, embedding, filepath):
     assert embedding.shape[0] == len(vocab)
 
@@ -327,6 +365,7 @@ def dump_cosine_similarity_tsv(config, vocab, embedding, filepath, count=100):
     
     similar_file.close()
     dissimilar_file.close()
+
 
 def conv2d_output_size(W, H, F=3, S=1, P=1):
     W2 = (W - F + 2*P)//S + 1

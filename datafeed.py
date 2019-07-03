@@ -80,6 +80,8 @@ class DataFeed(object):
             
         self._offset += batch_size
         b = self.data[ self.offset - batch_size   :   self.offset ]
+        if len(b) < 1:
+            raise Exception
         if apply_batchop:
             return self._batchop(b)
         return b
@@ -110,6 +112,13 @@ class DataFeed(object):
             batch_size = self.batch_size
             
         b =    self.data[ n * batch_size   :   (n+1) * batch_size ]
+
+        if len(b) < 1:
+            if not (n - 1) > 0:
+                return self.nth_batch(n-1, batch_size, apply_batchop)
+            else:
+                return self.nth_batch(0, batch_size, apply_batchop)
+                
         if apply_batchop:
             return self._batchop(b)
         
