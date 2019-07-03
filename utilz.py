@@ -1,4 +1,3 @@
-import config
 from pprint import pprint, pformat
 
 import os
@@ -59,7 +58,7 @@ from pprint import pprint, pformat
 from tqdm import tqdm as _tqdm
 
 def tqdm(a, *args, **kwargs):
-    return _tqdm(a, ncols=100,  *args, **kwargs) if config.CONFIG.tqdm else a
+    return _tqdm(a, ncols=100,  *args, **kwargs) # if config.CONFIG.tqdm else a
 
 
 def squeeze(lol):
@@ -144,24 +143,39 @@ class ListTable(list):
 torch utils
 """
 def are_weights_same(model1, model2):
-    for p1, p2 in zip(model1.parameters(), model2.parameters()):
-        if p1.data.ne(p2.data).sum() > 0:
+    m1dict = model1.state_dict()
+    m2dict = model2.state_dict()
+    
+    if m1dict.keys() != m2dict.keys():
+        log.error('models don\'t match')
+        log.error(pformat(m1dict.keys()))
+        log.error(pformat(m2dict.keys()))
+        return False
+    
+    for p in m1dict.keys():
+        ne = m1dict[p].data.ne(m2dict[p].data)
+        if ne.sum() > 0:
+            print('===== {} ===='.format(p))
+            print(ne.cpu().numpy())
+            print('sum = ', ne.sum().cpu().numpy())
+    
             return False
+        
     return True
 
-def LongVar(array, requires_grad=False):
-    return Var(array, requires_grad).long()
+def LongVar(config, array, requires_grad=False):
+    return Var(config, array, requires_grad).long()
 
-def Var(array, requires_grad=False):
+def Var(config, array, requires_grad=False):
     ret =  Variable(torch.Tensor(array), requires_grad=requires_grad)
     if config.CONFIG.cuda:
         ret = ret.cuda()
 
     return ret
 
-def init_hidden(batch_size, cell):
+def init_hidden(config, batch_size, cell):
     layers = 1
-    if isinstance(cell, (nn.LSTM, nn.GRU, nn.LSTMCell, nn.GRUCell)):
+    if isinstance(cell, (nn.LSTM, nn.GRU)):
         layers = cell.num_layers
         if cell.bidirectional:
             layers = layers * 2
@@ -180,6 +194,10 @@ def init_hidden(batch_size, cell):
         if config.CONFIG.cuda:
             hidden  = hidden.cuda()
         return hidden
+
+class FLAGS:
+    CONTINUE_TRAINING = 0
+    STOP_TRAINING = 1
     
 class Averager(list):
     def __init__(self, config, filename=None, ylim=None, *args, **kwargs):
@@ -193,6 +211,8 @@ class Averager(list):
                 if os.path.isfile(f):
                     log.debug('loading {}'.format(f))
                     self.extend(pickle.load(open(f, 'rb')))
+            except KeyboardInterrupt:
+                raise KeyboardInterrupt
             except:
                 open(filename, 'w').close()
 
@@ -211,10 +231,7 @@ class Averager(list):
         return '<empty>'
 
     def append(self, a):
-        try:
-            super(Averager, self).append(a.data.item())
-        except:
-            super(Averager, self).append(a)
+        super(Averager, self).append(a)
             
     def empty(self):
         del self[:]
@@ -238,6 +255,20 @@ class Averager(list):
                 f.write(self.__str__() + '\n')
                 f.flush()
 
+    
+
+class EpochAverager(Averager):
+    def __init__(self, config, filename=None, *args, **kwargs):
+        super(EpochAverager, self).__init__(config, filename, *args, **kwargs)
+        self.config = config
+        self.epoch_cache = Averager(config, filename, *args, *kwargs)
+
+    def cache(self, a):
+        self.epoch_cache.append(a)
+
+    def clear_cache(self):
+        super(EpochAverager, self).append(self.epoch_cache.avg)
+        self.epoch_cache.empty();
                 
 
 # Python program to find SHA256 hash string of a file
@@ -254,3 +285,50 @@ def hash_file(filename):
     return sha256_hash.hexdigest()
 
 
+def dump_vocab_tsv(config, vocab, embedding, filepath):
+    assert embedding.shape[0] == len(vocab)
+
+    vector_filepath = filepath.replace('.tsv', '.vector.tsv')
+    token_filepath  = filepath.replace('.tsv', '.token.tsv')
+
+    vector_file = open(vector_filepath, 'w')
+    token_file  = open(token_filepath,  'w')
+    
+    for i, vector in enumerate(embedding):
+        vector_file.write('\t'.join([str(v) for v in vector]) + '\n')
+        token_file.write(vocab[i] + '\n')
+
+    vector_file.close()
+    token_file.close()
+
+
+def dump_cosine_similarity_tsv(config, vocab, embedding, filepath, count=100):
+    assert embedding.shape[0] == len(vocab)
+
+    matrix_filepath = filepath.replace('.tsv', '.matrix.pkl')
+    similar_filepath = filepath.replace('.tsv', '.similar.tsv')
+    dissimilar_filepath  = filepath.replace('.tsv', '.dissimilar.tsv')
+
+    e_norm = embedding / embedding.norm(dim=1)[:, None]
+    scores = torch.mm(e_norm, e_norm.t())
+
+    pickle.dump(scores.cpu().numpy(), open(matrix_filepath, 'wb'))
+
+    similars = scores.topk(count, dim=1)[1]
+    dissimilars = (1 - scores).topk(count, dim=1)[1]
+
+
+    similar_file = open(similar_filepath, 'w')
+    dissimilar_file  = open(dissimilar_filepath,  'w')
+    
+    for i in range(len(vocab)):
+        similar_file.write('|'.join(vocab.index2word[j] for j in similars[i]) + '\n')
+        dissimilar_file.write('|'.join(vocab.index2word[j] for j in dissimilars[i]) + '\n')
+    
+    similar_file.close()
+    dissimilar_file.close()
+
+def conv2d_output_size(W, H, F=3, S=1, P=1):
+    W2 = (W - F + 2*P)//S + 1
+    H2 = (H - F + 2*P)//S + 1
+    return (W2, H2)
